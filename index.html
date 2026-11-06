@@ -167,7 +167,7 @@ function stopHTML(s,i,day,o){o=o||{};
   ${s.address?`<div class="muted small">📍 ${esc(s.address)}${s.pinApprox?' <span class="warnc">(map pin approximate)</span>':''}</div>`:''}
   ${s.hours?`<div class="muted small">🕘 ${esc(s.hours)}</div>`:''}
   ${s.price?`<div class="small">💴 ${esc(s.price)}</div>`:''}
-  ${s.note?`<div class="small" style="margin-top:4px">${esc(s.note)}</div>`:''}
+  ${s.note?`<div class="small" style="margin-top:4px;white-space:pre-line">${esc(s.note)}</div>`:''}
   <div class="row" style="margin-top:8px"><a class="btn sm" href="${dirURL(s)}" target="_blank" rel="noopener">🧭 Directions</a>
   ${o.edit?`<button class="btn sm" onclick="editStop(${o.d},${i})">✏️ Edit</button>`:''}</div>
   ${legHTML(s.transitTo,s,day.stops[i+1])}</div>`}
