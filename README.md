@@ -16,3 +16,4 @@ A small offline-friendly trip app (PWA). It contains **no personal trip data**. 
 - Info → Data → Export to back up, or to send Claude your edited version.
 
 **Never upload the trip file to GitHub.**
+bleh
