@@ -16,4 +16,6 @@ A small offline-friendly trip app (PWA). It contains **no personal trip data**. 
 - Info → Data → Export to back up, or to send Claude your edited version.
 
 **Never upload the trip file to GitHub.**
-bleh.
+
+## Shipping an app update
+Bump `APP_VERSION` in `index.html` **and** `v` in `version.json` to the same new value. Open copies of the app will show an "App update ready → Reload" banner.

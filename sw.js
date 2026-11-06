@@ -1,4 +1,4 @@
-const V='jt-shell-v1';
+const V='jt-shell-v2';
 const SHELL=['./','./index.html','./manifest.json','./icon-180.png','./icon-192.png','./icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'];
@@ -6,6 +6,7 @@ self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('jt-shell')&&k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',e=>{
   const r=e.request;if(r.method!=='GET')return;const u=new URL(r.url);
+  if(u.pathname.endsWith('/version.json'))return; // always ask the network
   // map tiles: cache what you've viewed so it shows offline
   if(u.hostname.endsWith('tile.openstreetmap.org')){
     e.respondWith(caches.open('jt-tiles').then(async c=>{const hit=await c.match(r);if(hit)return hit;

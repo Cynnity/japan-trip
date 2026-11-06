@@ -75,6 +75,8 @@ textarea{min-height:80px}
 .wx .t{font-size:28px;font-weight:800}
 .list>div{padding:8px 0;border-bottom:1px solid var(--line)}.list>div:last-child{border:0}
 .ask{z-index:2500;align-items:center}
+.upd{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:1500;display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--accent);border-radius:14px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
+.seg{display:flex;gap:6px;margin:8px 0 4px}.seg button{flex:1;background:var(--bg);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:7px 6px;font:600 13px/1.1 inherit}.seg button.on{background:var(--accent2);border-color:var(--accent2);color:#0f1220}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000;color:#fff;padding:10px 14px;border-radius:12px;z-index:3000;font-size:14px}
 </style>
 </head>
@@ -93,6 +95,7 @@ textarea{min-height:80px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 "use strict";
+const APP_VERSION="1.4";
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -105,7 +108,8 @@ const saveTrip=()=>LS.set('jt_trip',trip), saveSpend=()=>LS.set('jt_spend',spend
 function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
 function nowIn(tz){const f=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
   const p=Object.fromEntries(f.formatToParts(new Date()).map(x=>[x.type,x.value]));return{date:`${p.year}-${p.month}-${p.day}`,mins:(+p.hour%24)*60+ +p.minute}}
-const toMin=t=>{if(!t||!/^\d{1,2}:\d{2}$/.test(t))return null;const[h,m]=t.split(':').map(Number);return h*60+m};
+const toMin=t=>{if(!t||!/^\d{1,2}:\d{2}$/.test(String(t).trim()))return null;t=String(t).trim();const[h,m]=t.split(':').map(Number);return h*60+m};
+const minRaw=m=>{m=Math.max(0,Math.round(m));return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
 const minTo=m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
 const t12=t=>{const m=toMin(t);if(m===null)return t||'';let h=Math.floor(m/60)%24;const ap=h>=12?'PM':'AM';h=h%12||12;return `${h}:${String(m%60).padStart(2,'0')} ${ap}`};
 const dLabel=(d,o)=>new Date(d+'T12:00:00Z').toLocaleDateString('en-US',Object.assign({weekday:'short',month:'short',day:'numeric',timeZone:'UTC'},o||{}));
@@ -120,16 +124,28 @@ const isOk=v=>v&&v.ok;
 const today=()=>nowIn(TZ).date;
 const dTZ=d=>d.tz||TZ;
 /* which trip day is 'now' (each day can run on its own time zone, e.g. a Florida travel day) */
-function curDay(){const D=trip.days;for(let i=0;i<D.length;i++){const n=nowIn(dTZ(D[i]));if(n.date!==D[i].date)continue;
-  const last=Math.max(0,...D[i].stops.map(s=>toMin(s.time)??0));const nx=D[i+1];
+const addDays=(d,k)=>new Date(Date.parse(d+'T00:00:00Z')+k*864e5).toISOString().slice(0,10);
+let curAdd=0; /* 1440 while a day's plan runs past midnight (e.g. an all-nighter) */
+function curDay(){const D=trip.days;curAdd=0;for(let i=0;i<D.length;i++){const n=nowIn(dTZ(D[i]));
+  const last=Math.max(0,...D[i].stops.map(s=>toMin(s.time)??0));
+  if(last>=1440&&n.date===addDays(D[i].date,1)&&n.mins+1440<=last+30){curAdd=1440;return i}
+  if(n.date!==D[i].date)continue;const nx=D[i+1];
   if(n.mins<=last+30||!nx||nowIn(dTZ(nx)).date!==nx.date)return i}return -1}
 const uid=()=>Math.random().toString(36).slice(2,9);
 function dirURL(s){const dest=(isOk(s.verified)&&s.lat&&!s.pinApprox)?`${s.lat},${s.lon}`:encodeURIComponent([s.name,s.address].filter(Boolean).join(', '));
   return `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=transit`}
-function legURL(a,b){const p=s=>(isOk(s.verified)&&s.lat&&!s.pinApprox)?`${s.lat},${s.lon}`:encodeURIComponent([s.name,s.address].filter(Boolean).join(', '));
-  return `https://www.google.com/maps/dir/?api=1&origin=${p(a)}&destination=${p(b)}&travelmode=transit`}
+function legURL(a,b,mode){const p=s=>(isOk(s.verified)&&s.lat&&!s.pinApprox)?`${s.lat},${s.lon}`:encodeURIComponent([s.name,s.address].filter(Boolean).join(', '));
+  return `https://www.google.com/maps/dir/?api=1&origin=${p(a)}&destination=${p(b)}&travelmode=${mode==='walk'?'walking':'transit'}`}
 function dist(a,b){if(!a||!b||a.lat==null||b.lat==null)return null;const R=6371,r=x=>x*Math.PI/180,dLa=r(b.lat-a.lat),dLo=r(b.lon-a.lon);
   const h=Math.sin(dLa/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+/* walking estimate: straight line x1.3 for streets, 4.8 km/h */
+const walkMin=(a,b)=>{const k=dist(a,b);return k==null?null:Math.max(1,Math.round(k*1.3/4.8*60))};
+const allWalkLeg=l=>!!(l&&l.steps&&l.steps.length&&l.steps.every(x=>x.mode==='walk'));
+function legChoice(s,b){const l=s&&s.transitTo,t=legMins(l),w=b?walkMin(s,b):null,aw=allWalkLeg(l);
+  const canWalk=!aw&&t>0&&w!=null&&w<=45;const rec=canWalk&&(w<=15||w<=t+5)?'walk':'transit';
+  const mode=aw?'walk':(canWalk&&l.pick==='walk')?'walk':'transit';
+  let mins=mode==='walk'&&!aw?w:t;if((!l||(!t&&!aw))&&w!=null)mins=w<=30?w:Math.round(12+dist(s,b)*2.2);
+  return {t,w,aw,canWalk,rec,mode,mins}}
 const routeKm=st=>{let d=0;for(let i=1;i<st.length;i++){const x=dist(st[i-1],st[i]);if(x!=null)d+=x}return d};
 function vBadge(v){return isOk(v)?`<span class="badge ok">✅ Verified${v.src?' · '+esc(v.src):''}</span>`:`<span class="badge warn">⚠️ Check this</span>`}
 
@@ -154,12 +170,18 @@ function welcome(){return `<div class="card"><h2>Welcome 👋</h2>
   <div class="card muted small">Tip: in Safari, tap Share → <b>Add to Home Screen</b> to use this like an app. After it loads once, it works offline.</div>`}
 
 /* ---------- stop + leg blocks ---------- */
-function legHTML(l,a,b){if(!l)return '';
+function legHTML(s,b,di,si){const l=s&&s.transitTo,c=legChoice(s,b);
+  if(!l){if(b&&c.w!=null&&c.w<=30)return `<div class="leg"><div class="between"><b>Getting to next stop</b><span class="small">🚶 ~${c.w} min walk (est.)</span></div><div style="margin-top:6px"><a class="small" href="${legURL(s,b,'walk')}" target="_blank" rel="noopener">Walking directions →</a></div></div>`;return ''}
+  const a=s;
   const steps=(l.steps||[]).map(s=>`<li>${({walk:'🚶',train:'🚆',subway:'🚇',bus:'🚌',taxi:'🚕',ferry:'⛴️',ropeway:'🚡',plane:'✈️'}[s.mode]||'➡️')} ${esc(s.text)}${s.mins?` <span class="small">· ${s.mins} min</span>`:''}${s.fare?` <span class="small">· ~${yen(s.fare)}</span>`:''}</li>`).join('');
-  const m=legMins(l),f=legFare(l);
-  return `<div class="leg"><div class="between"><b>Getting to next stop</b><span class="small">${m?m+' min':''}${f?' · ~'+yen(f):''}</span></div>
-  ${steps?`<ol>${steps}</ol>`:''}${l.note?`<div class="small">${esc(l.note)}</div>`:''}${l.lastTrain?`<div class="small warnc">🌙 Last train: ${esc(l.lastTrain)}</div>`:''}
-  ${a&&b?`<div style="margin-top:6px"><a class="small" href="${legURL(a,b)}" target="_blank" rel="noopener">Live directions in Google Maps →</a></div>`:''}</div>`}
+  const f=legFare(l),walking=c.mode==='walk'&&!c.aw;
+  const sum=walking?`🚶 ~${c.w} min walk`:`${c.t?c.t+' min':''}${f?' · ~'+yen(f):''}`;
+  const tog=c.canWalk&&di!=null?`<div class="seg"><button class="${!walking?'on':''}" onclick="setLeg(${di},${si},'transit')">🚆 Transit ${c.t}m${c.rec==='transit'?' ★':''}</button><button class="${walking?'on':''}" onclick="setLeg(${di},${si},'walk')">🚶 Walk ~${c.w}m${c.rec==='walk'?' ★':''}</button></div>`:'';
+  const tip=c.canWalk&&c.rec==='walk'&&!walking?`<div class="small okc">★ Walking is about as fast${f?' and saves ~'+yen(f):''}. Tap Walk to switch.</div>`:'';
+  return `<div class="leg"><div class="between"><b>Getting to next stop</b><span class="small">${sum}</span></div>${tog}${tip}
+  ${walking?`<div class="small" style="margin-top:4px">Walking estimate from the map (~${(dist(s,b)*1.3).toFixed(1)} km). Check the route in Google Maps.</div>`:(steps?`<ol>${steps}</ol>`:'')}${l.note&&!walking?`<div class="small">${esc(l.note)}</div>`:''}${l.lastTrain?`<div class="small warnc">🌙 Last train: ${esc(l.lastTrain)}</div>`:''}
+  ${b?`<div style="margin-top:6px"><a class="small" href="${legURL(s,b,walking||c.aw?'walk':'transit')}" target="_blank" rel="noopener">Live directions in Google Maps →</a></div>`:''}</div>`}
+function setLeg(di,si,m){const s=trip.days[di].stops[si];if(!s.transitTo)return;s.transitTo.pick=m;saveTrip();render()}
 function stopHTML(s,i,day,o){o=o||{};
   return `<div class="stop ${o.cls||''}"><div class="between"><span class="time">${esc(t12(s.time))}${s.end?' – '+esc(t12(s.end)):''}</span>
   <span>${s.locked?'<span class="badge lock">🔒 Booked</span> ':''}${vBadge(s.verified)}</span></div>
@@ -170,7 +192,7 @@ function stopHTML(s,i,day,o){o=o||{};
   ${s.note?`<div class="small" style="margin-top:4px;white-space:pre-line">${esc(s.note)}</div>`:''}
   <div class="row" style="margin-top:8px"><a class="btn sm" href="${dirURL(s)}" target="_blank" rel="noopener">🧭 Directions</a>
   ${o.edit?`<button class="btn sm" onclick="editStop(${o.d},${i})">✏️ Edit</button>`:''}</div>
-  ${legHTML(s.transitTo,s,day.stops[i+1])}</div>`}
+  ${legHTML(s,day.stops[i+1],o.d,i)}</div>`}
 function dayCost(d){let y=0;d.stops.forEach(s=>{y+=+s.cost||0;y+=legFare(s.transitTo)});return y}
 
 /* ---------- TODAY ---------- */
@@ -182,23 +204,23 @@ function rToday(){
     const up=(trip.deadlines||[]).filter(x=>!x.done&&x.date>=n.date).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,4);
     if(up.length)h+=`<div class="card"><h2>⏰ Coming up</h2><div class="list">${up.map(x=>`<div><div class="between"><b>${esc(x.title)}</b><span class="small muted">${dLabel(x.date)}</span></div>${x.note?`<div class="small muted">${esc(x.note)}</div>`:''}</div>`).join('')}</div><button class="btn sm ghost" onclick="setTab('info')">All deadlines →</button></div>`;
     h+=wxCard(trip.days[0]);
-    h+=`<div class="card"><h2>Day 1 preview · ${dLabel(s)}</h2>${trip.days[0].stops.map((x,j)=>stopHTML(x,j,trip.days[0])).join('')}</div>`;
+    h+=`<div class="card"><h2>Day 1 preview · ${dLabel(s)}</h2>${trip.days[0].stops.map((x,j)=>stopHTML(x,j,trip.days[0],{d:0})).join('')}</div>`;
   }else if(i<0){
     h+=`<div class="card"><div class="big">おかえり! 🏠</div><p class="muted">Trip complete. Your spending log and haul are still in the Money tab.</p></div>`;
   }else{
-    const d=trip.days[i],st=d.stops,n=nowIn(dTZ(d));let cur=-1,nx=-1;
+    const d=trip.days[i],st=d.stops,n0d=nowIn(dTZ(d)),n={date:n0d.date,mins:n0d.mins+curAdd};let cur=-1,nx=-1;
     st.forEach((x,j)=>{const m=toMin(x.time);if(m!==null&&m<=n.mins)cur=j});
     nx=st.findIndex((x,j)=>j>cur&&toMin(x.time)!==null&&toMin(x.time)>n.mins);
     h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}</div><h2 style="margin:2px 0 6px">${esc(d.title)}</h2>${d.tzNote?`<div class="small warnc">🕒 ${esc(d.tzNote)}</div>`:''}`;
-    if(nx>=0){const nxt=st[nx],travel=cur>=0?legMins(st[cur].transitTo):0,leave=toMin(nxt.time)-travel,until=leave-n.mins;
+    if(nx>=0){const nxt=st[nx],travel=cur>=0?legChoice(st[cur],st[cur+1]).mins:0,leave=toMin(nxt.time)-travel,until=leave-n.mins;
       h+=`<div class="hr"></div><div class="muted small">Next up</div><div style="font-size:20px;font-weight:700">${esc(nxt.name)}</div>
       <div>${t12(nxt.time)}${travel?` · <b class="${until<=15?'warnc':''}">leave by ${t12(minTo(leave))}</b>`:''}</div>
       <div class="muted small">${until>0?`in ${Math.floor(until/60)?Math.floor(until/60)+'h ':''}${until%60}m`:'time to go!'}</div>`}
     else h+=`<div class="muted">Nothing else scheduled. Free time! 🎉</div>`;
     h+=`</div>`;
-    if(cur>=0&&st[cur].transitTo)h+=`<div class="card"><h2>🚆 How to get there</h2>${legHTML(st[cur].transitTo,st[cur],st[cur+1])}</div>`;
+    if(cur>=0&&st[cur+1]){const lh=legHTML(st[cur],st[cur+1],i,cur);if(lh)h+=`<div class="card"><h2>🚆 How to get there</h2>${lh}</div>`}
     h+=wxCard(d);
-    h+=`<div class="card"><div class="between"><h2>Today's plan</h2><span class="small muted">${d.walk?'🚶 '+esc(d.walk):''}</span></div>${st.map((x,j)=>stopHTML(x,j,d,{cls:j===cur?'now':(j<cur?'done':'')})).join('')}</div>`;
+    h+=`<div class="card"><div class="between"><h2>Today's plan</h2><span class="small muted">${d.walk?'🚶 '+esc(d.walk):''}</span></div>${st.map((x,j)=>stopHTML(x,j,d,{d:i,cls:j===cur?'now':(j<cur?'done':'')})).join('')}</div>`;
     if(d.planB&&d.planB.length)h+=`<div class="card"><h2>🌧️ Plan B</h2><ul class="small">${d.planB.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
   }
   h+=clockCard();
@@ -228,7 +250,8 @@ function rDays(){if(selDay<0)selDay=0;const d=trip.days[selDay],c=dayCost(d);
   let h=dayChips(false);
   h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}${d.stay?' · 🛏️ '+esc(d.stay):''}</div><h2 style="margin:2px 0 4px">${esc(d.title)}</h2>${d.tzNote?`<div class="small warnc">🕒 ${esc(d.tzNote)}</div>`:''}
   <div class="row small muted">${d.walk?`<span>🚶 ${esc(d.walk)}</span>`:''}${c?`<span>💴 ~${yen(c)} (~${usd(toUSD(c,'JPY'))}) planned</span>`:''}</div>
-  <div class="row" style="margin-top:10px"><button class="btn sm" onclick="editStop(${selDay},-1)">＋ Add stop</button><button class="btn sm" onclick="optimize(${selDay})">⚡ Optimize order</button></div></div>`;
+  <div class="row" style="margin-top:10px"><button class="btn sm" onclick="editStop(${selDay},-1)">＋ Add stop</button><button class="btn sm" onclick="optimize(${selDay})">⚡ Optimize</button><button class="btn sm" onclick="checkTiming(${selDay})">⏱️ Check timing</button></div>
+  <div class="small muted" style="margin-top:6px">Optimize switches short hops to walking and reorders stops to cut backtracking (booked stops stay put). Check timing makes sure you can reach every stop on time.</div></div>`;
   h+=`<div class="card">${d.stops.length?d.stops.map((s,i)=>stopHTML(s,i,d,{edit:1,d:selDay})).join(''):'<div class="muted">No stops yet.</div>'}</div>`;
   if(d.planB&&d.planB.length)h+=`<div class="card"><h2>🌧️ Plan B</h2><ul class="small">${d.planB.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
   if(trip.flex&&trip.flex.length)h+=`<div class="card"><h2>🎲 Flex pool</h2><div class="muted small">Swap any of these in on a free afternoon.</div><ul class="small">${trip.flex.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
@@ -236,7 +259,7 @@ function rDays(){if(selDay<0)selDay=0;const d=trip.days[selDay],c=dayCost(d);
 function editStop(di,si){const d=trip.days[di],s=si>=0?d.stops[si]:{time:'',name:'',verified:{ok:false}};
   const legTxt=(s.transitTo&&s.transitTo.steps||[]).map(x=>[x.mode,x.mins||'',x.fare||'',x.text].join(' | ')).join('\n');
   openSheet(`<h2>${si>=0?'Edit stop':'Add stop'}</h2>
-  <div class="row"><div style="flex:1"><label>Start (24h, e.g. 14:30)</label><input id="fT" value="${esc(s.time)}" inputmode="numeric" placeholder="10:00"></div><div style="flex:1"><label>End (optional)</label><input id="fE" value="${esc(s.end||'')}" placeholder="11:00"></div></div>
+  <div class="row"><div style="flex:1"><label>Start (24h, e.g. 14:30 · after midnight use 25:00+)</label><input id="fT" value="${esc(s.time)}" inputmode="numeric" placeholder="10:00"></div><div style="flex:1"><label>End (optional)</label><input id="fE" value="${esc(s.end||'')}" placeholder="11:00"></div></div>
   <label>Name</label><input id="fN" value="${esc(s.name)}">
   <label>Address</label><input id="fA" value="${esc(s.address||'')}">
   <label>Price</label><input id="fP" value="${esc(s.price||'')}" placeholder="¥1,200 or Free">
@@ -262,15 +285,30 @@ function saveStop(di,si){const d=trip.days[di],old=si>=0?d.stops[si]:{};const v=
   saveTrip();closeSheet();render();toast('Saved')}
 function moveStop(di,si,dir){const st=trip.days[di].stops,j=si+dir;if(j<0||j>=st.length)return;[st[si],st[j]]=[st[j],st[si]];const t=st[si].time;st[si].time=st[j].time;st[j].time=t;saveTrip();closeSheet();render()}
 async function delStop(di,si){if(!await ask('Delete this stop?','Delete'))return;trip.days[di].stops.splice(si,1);saveTrip();closeSheet();render()}
-async function optimize(di){const d=trip.days[di],st=d.stops;if(st.length<3){toast('Not enough stops to reorder');return}
-  const times=st.map(s=>s.time),nextOf=new Map(st.map((s,i)=>[s,st[i+1]]));const out=[];let seg=[],anchor=null;
-  const nn=(from,arr)=>{const res=[],pool=arr.slice();let c=from;while(pool.length){let bi=0,bd=Infinity;pool.forEach((p,j)=>{const x=c?dist(c,p):0;const dd=x==null?1e6:x;if(dd<bd){bd=dd;bi=j}});c=pool.splice(bi,1)[0];res.push(c)}return res};
-  st.forEach((s,i)=>{if(s.locked||i===0){out.push(...nn(anchor,seg));seg=[];out.push(s);anchor=s}else seg.push(s)});out.push(...nn(anchor,seg));
-  const before=routeKm(st),after=routeKm(out);
-  if(after>=before-0.05){toast('Already in the best order 👍');return}
-  if(!await ask(`Reorder stops to cut about ${(before-after).toFixed(1)} km of zigzagging (${before.toFixed(1)} → ${after.toFixed(1)} km)? Booked stops stay put. Transit steps for moved stops will be cleared, so use Live directions for those.`,'Reorder'))return;
-  out.forEach((s,i)=>{s.time=times[i];if(nextOf.get(s)!==out[i+1]&&s.transitTo){s.transitTo={steps:[],note:'Order changed. Tap Live directions.',lastTrain:s.transitTo.lastTrain}}});
-  d.stops=out;saveTrip();render();toast('Reordered')}
+const isAnchor=(s,i,st)=>s.locked||i===0||i===st.length-1||/^Home/.test(s.name||'');
+async function optimize(di){const d=trip.days[di],msgs=[];let st=d.stops;
+  if(st.length>=3){const times=st.map(s=>s.time),ends=st.map(s=>s.end),nextOf=new Map(st.map((s,i)=>[s,st[i+1]]));const out=[];let seg=[],anchor=null;
+    const nn=(from,arr)=>{const res=[],pool=arr.slice();let c=from;while(pool.length){let bi=0,bd=Infinity;pool.forEach((p,j)=>{const x=c?dist(c,p):0;const dd=x==null?1e6:x;if(dd<bd){bd=dd;bi=j}});c=pool.splice(bi,1)[0];res.push(c)}return res};
+    st.forEach((s,i)=>{if(isAnchor(s,i,st)){out.push(...nn(anchor,seg));seg=[];out.push(s);anchor=s}else seg.push(s)});out.push(...nn(anchor,seg));
+    const before=routeKm(st),after=routeKm(out);
+    if(after<before-0.3&&await ask(`Reorder stops to cut about ${(before-after).toFixed(1)} km of backtracking? Booked stops and home stay where they are. Moved stops lose their saved transit steps, so use Live directions for those.`,'Reorder')){
+      out.forEach((s,i)=>{const dur=(toMin(s.end)!=null&&toMin(s.time)!=null)?toMin(s.end)-toMin(s.time):null;s.time=times[i];if(dur!=null)s.end=minRaw(toMin(s.time)+dur);
+        if(nextOf.get(s)!==out[i+1]&&s.transitTo){s.transitTo={steps:[],note:'Order changed. Tap Live directions.',lastTrain:s.transitTo.lastTrain}}});
+      d.stops=st=out;msgs.push(`Reordered (−${(before-after).toFixed(1)} km)`)}}
+  let w=0;st.forEach((s,i)=>{const b=st[i+1];if(!b)return;const c=legChoice(s,b);if(c.canWalk&&c.rec==='walk'&&c.mode!=='walk'){s.transitTo.pick='walk';w++}});
+  if(w)msgs.push(`${w} short hop${w>1?'s':''} switched to walking`);
+  saveTrip();render();await checkTiming(di,msgs.length?msgs.join(' · ')+'. ':'Already efficient. ')}
+async function checkTiming(di,pre){pre=pre||'';const st=trip.days[di].stops,shift=[],bad=[];let prevEnd=null;
+  for(let i=0;i<st.length;i++){const s=st[i],t=toMin(s.time);if(t==null)continue;let start=t;
+    if(i>0&&prevEnd!=null){const arr=prevEnd+(legChoice(st[i-1],s).mins||0);
+      if(arr>t+2){if(s.locked)bad.push(`🔒 ${s.name}: you'd get there ~${t12(minTo(arr))}, but it's booked for ${t12(s.time)}.`);else{start=Math.ceil(arr/5)*5;shift.push({i,start,by:start-t})}}}
+    const dur=(s.end&&toMin(s.end)!=null)?Math.max(0,toMin(s.end)-t):0;prevEnd=start+dur}
+  if(!shift.length&&!bad.length){toast(pre+'Timing works ✓');return}
+  const lines=[...bad,...shift.map(x=>`${st[x.i].name}: ${t12(st[x.i].time)} → ${t12(minTo(x.start))} (+${x.by} min)`)];
+  if(!shift.length){await ask(pre+'Heads up:\n'+lines.join('\n')+'\nLeave earlier or cut time at the stop before.','OK',true);return}
+  if(!await ask(pre+'Some stops start before you can get there:\n'+lines.join('\n')+'\nPush those stops later?','Push later'))return;
+  shift.forEach(x=>{const s=st[x.i];if(s.end&&toMin(s.end)!=null)s.end=minRaw(toMin(s.end)+x.by);s.time=minRaw(x.start)});
+  saveTrip();render();toast('Times updated')}
 
 /* ---------- MAP ---------- */
 function rMap(){$('#main').innerHTML=dayChips(true)+`<div id="map"></div><div class="row" style="margin-top:10px"><button class="btn sm" onclick="locate()">📍 Where am I</button><span class="small muted">Lines connect stops in order. Orange pins = still need checking.</span></div>`;
@@ -353,7 +391,7 @@ function rInfo(){const views={bookings:'Bookings',check:'Needs checking',dates:'
     h+=clockCard();}
   if(infoView==='data'){h+=`<div class="card"><h2>📂 Your trip file</h2><p class="small muted">Everything lives only on this phone. Export to back it up or to send me a copy to update. Import a new file to replace the trip (your spending log stays).</p>
     <div class="row"><button class="btn pri" onclick="pickFile()">Import trip file</button><button class="btn" onclick="exportTrip()">Export / back up</button></div>
-    <div class="small muted" style="margin-top:8px">Trip file version: ${esc(trip.version||'?')} · ${spend.length} purchases logged</div></div>
+    <div class="small muted" style="margin-top:8px">Trip file version: ${esc(trip.version||'?')} · App v${APP_VERSION} · ${spend.length} purchases logged</div><button class="btn sm ghost" style="margin-top:6px" onclick="checkUpdate().then(()=>{if(!$('#upd'))toast('App is up to date')})">Check for app update</button></div>
     <div class="card"><h2>Reset</h2><p class="small muted">Clears the trip and spending log from this phone.</p><button class="btn" style="color:var(--accent)" onclick="resetAll()">Erase everything</button></div>`;}
   $('#main').innerHTML=h;if(infoView==='help')tickClocks();}
 function unverified(){const out=[],seen=new Map();
@@ -373,7 +411,7 @@ function say(i){const p=trip.phrases[i];if(!('speechSynthesis' in window)){toast
 
 /* ---------- in-page confirm (no browser pop-ups) ---------- */
 function ask(msg,yes,only){return new Promise(res=>{const d=document.createElement('div');d.className='modal ask';
-  d.innerHTML=`<div class="sheet" style="max-width:420px;border-radius:20px;margin:0 16px calc(24px + env(safe-area-inset-bottom))"><p style="margin:4px 0 14px">${esc(msg)}</p><div class="row" style="justify-content:flex-end">${only?'':'<button class="btn ghost" data-v="0">Cancel</button>'}<button class="btn pri" data-v="1">${esc(yes||'OK')}</button></div></div>`;
+  d.innerHTML=`<div class="sheet" style="max-width:420px;border-radius:20px;margin:0 16px calc(24px + env(safe-area-inset-bottom))"><p style="margin:4px 0 14px;white-space:pre-line">${esc(msg)}</p><div class="row" style="justify-content:flex-end">${only?'':'<button class="btn ghost" data-v="0">Cancel</button>'}<button class="btn pri" data-v="1">${esc(yes||'OK')}</button></div></div>`;
   d.onclick=e=>{const b=e.target.closest('button');if(!b&&e.target!==d)return;d.remove();res(!!(b&&b.dataset.v==='1'))};document.body.appendChild(d)})}
 /* ---------- sheet / import / export ---------- */
 function openSheet(h){$('#sheet').innerHTML=h;$('#modal').classList.remove('hidden')}
@@ -394,6 +432,16 @@ async function exportTrip(){const data=JSON.stringify(Object.assign({},trip,{_sp
 async function resetAll(){if(!await ask('Erase the trip and spending log from this phone? Export first if you want a backup.','Erase'))return;['jt_trip','jt_spend'].forEach(k=>localStorage.removeItem(k));trip=null;spend=[];render()}
 
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+/* ---------- app update check ---------- */
+async function checkUpdate(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const j=await r.json();if(j&&j.v&&j.v!==APP_VERSION)showUpdate(j)}catch(e){}}
+function showUpdate(j){if($('#upd'))return;const d=document.createElement('div');d.id='upd';d.className='upd';
+  d.innerHTML=`<div style="min-width:0"><b>App update ready (v${esc(j.v)})</b><div class="small muted">${esc(j.note||'Tap Reload. Your trip and spending stay put.')}</div></div><button class="btn pri sm" onclick="doUpdate()">Reload</button>`;document.body.appendChild(d)}
+async function doUpdate(){const b=$('#upd button');if(b)b.textContent='Updating…';
+  try{if(navigator.serviceWorker){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.update().catch(()=>{})}
+    const ks=await caches.keys();await Promise.all(ks.filter(k=>k.startsWith('jt-shell')).map(k=>caches.delete(k)))}catch(e){}
+  location.reload()}
+window.addEventListener('load',()=>setTimeout(checkUpdate,1200));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 render();
 </script>
 </body>
