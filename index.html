@@ -75,6 +75,7 @@ textarea{min-height:80px}
 .wx .t{font-size:28px;font-weight:800}
 .list>div{padding:8px 0;border-bottom:1px solid var(--line)}.list>div:last-child{border:0}
 .ask{z-index:2500;align-items:center}
+.tipchip{background:none;border:1px dashed var(--accent2);color:var(--accent2);border-radius:99px;padding:4px 9px;font:600 12px/1.2 inherit;cursor:pointer}
 .upd{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:1500;display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--accent);border-radius:14px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
 .seg{display:flex;gap:6px;margin:8px 0 4px}.seg button{flex:1;background:var(--bg);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:7px 6px;font:600 13px/1.1 inherit}.seg button.on{background:var(--accent2);border-color:var(--accent2);color:#0f1220}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000;color:#fff;padding:10px 14px;border-radius:12px;z-index:3000;font-size:14px}
@@ -95,7 +96,7 @@ textarea{min-height:80px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION="1.4";
+const APP_VERSION="1.5";
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -105,7 +106,7 @@ const TZ='Asia/Tokyo';
 let trip=LS.get('jt_trip',null), spend=LS.get('jt_spend',[]), rate=LS.get('jt_rate',null);
 let tab=LS.get('jt_tab','today'), selDay=null, map=null, meMarker=null, watchId=null, clockTimer=null;
 const saveTrip=()=>LS.set('jt_trip',trip), saveSpend=()=>LS.set('jt_spend',spend);
-function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
+function toast(t){document.querySelectorAll('.toast').forEach(x=>x.remove());const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
 function nowIn(tz){const f=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
   const p=Object.fromEntries(f.formatToParts(new Date()).map(x=>[x.type,x.value]));return{date:`${p.year}-${p.month}-${p.day}`,mins:(+p.hour%24)*60+ +p.minute}}
 const toMin=t=>{if(!t||!/^\d{1,2}:\d{2}$/.test(String(t).trim()))return null;t=String(t).trim();const[h,m]=t.split(':').map(Number);return h*60+m};
@@ -183,15 +184,17 @@ function legHTML(s,b,di,si){const l=s&&s.transitTo,c=legChoice(s,b);
   ${b?`<div style="margin-top:6px"><a class="small" href="${legURL(s,b,walking||c.aw?'walk':'transit')}" target="_blank" rel="noopener">Live directions in Google Maps →</a></div>`:''}</div>`}
 function setLeg(di,si,m){const s=trip.days[di].stops[si];if(!s.transitTo)return;s.transitTo.pick=m;saveTrip();render()}
 function stopHTML(s,i,day,o){o=o||{};
-  return `<div class="stop ${o.cls||''}"><div class="between"><span class="time">${esc(t12(s.time))}${s.end?' – '+esc(t12(s.end)):''}</span>
+  return `<div class="stop ${o.cls||''}${s.skipped?' done':''}">${s.skipped?'<div class="small warnc">⏭️ Skipped</div>':''}<div class="between"><span class="time">${esc(t12(s.time))}${s.end?' – '+esc(t12(s.end)):''}</span>
   <span>${s.locked?'<span class="badge lock">🔒 Booked</span> ':''}${vBadge(s.verified)}</span></div>
   <h3>${esc(s.name)}</h3>
   ${s.address?`<div class="muted small">📍 ${esc(s.address)}${s.pinApprox?' <span class="warnc">(map pin approximate)</span>':''}</div>`:''}
   ${s.hours?`<div class="muted small">🕘 ${esc(s.hours)}</div>`:''}
   ${s.price?`<div class="small">💴 ${esc(s.price)}</div>`:''}
   ${s.note?`<div class="small" style="margin-top:4px;white-space:pre-line">${esc(s.note)}</div>`:''}
+  ${(s.tips||[]).length?`<div class="row" style="margin-top:6px">${s.tips.map(t=>{const x=tipById(t);return x?`<button class="tipchip" onclick="openTip('${esc(t)}')">💡 ${esc(x.title)}</button>`:''}).join('')}</div>`:''}
   <div class="row" style="margin-top:8px"><a class="btn sm" href="${dirURL(s)}" target="_blank" rel="noopener">🧭 Directions</a>
-  ${o.edit?`<button class="btn sm" onclick="editStop(${o.d},${i})">✏️ Edit</button>`:''}</div>
+  ${(s.alts||[]).length&&o.d!=null?`<button class="btn sm" onclick="showAlts(${o.d},${i})">🔁 Backups (${s.alts.length})</button>`:''}
+  ${o.edit?`<button class="btn sm" onclick="editStop(${o.d},${i})">✏️ Edit</button><button class="btn sm ghost" onclick="toggleSkip(${o.d},${i})">${s.skipped?'↩️ Unskip':'⏭️ Skip'}</button>`:''}</div>
   ${legHTML(s,day.stops[i+1],o.d,i)}</div>`}
 function dayCost(d){let y=0;d.stops.forEach(s=>{y+=+s.cost||0;y+=legFare(s.transitTo)});return y}
 
@@ -210,7 +213,7 @@ function rToday(){
   }else{
     const d=trip.days[i],st=d.stops,n0d=nowIn(dTZ(d)),n={date:n0d.date,mins:n0d.mins+curAdd};let cur=-1,nx=-1;
     st.forEach((x,j)=>{const m=toMin(x.time);if(m!==null&&m<=n.mins)cur=j});
-    nx=st.findIndex((x,j)=>j>cur&&toMin(x.time)!==null&&toMin(x.time)>n.mins);
+    nx=st.findIndex((x,j)=>j>cur&&!x.skipped&&toMin(x.time)!==null&&toMin(x.time)>n.mins);
     h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}</div><h2 style="margin:2px 0 6px">${esc(d.title)}</h2>${d.tzNote?`<div class="small warnc">🕒 ${esc(d.tzNote)}</div>`:''}`;
     if(nx>=0){const nxt=st[nx],travel=cur>=0?legChoice(st[cur],st[cur+1]).mins:0,leave=toMin(nxt.time)-travel,until=leave-n.mins;
       h+=`<div class="hr"></div><div class="muted small">Next up</div><div style="font-size:20px;font-weight:700">${esc(nxt.name)}</div>
@@ -254,9 +257,9 @@ function rDays(){if(selDay<0)selDay=0;const d=trip.days[selDay],c=dayCost(d);
   <div class="small muted" style="margin-top:6px">Optimize switches short hops to walking and reorders stops to cut backtracking (booked stops stay put). Check timing makes sure you can reach every stop on time.</div></div>`;
   h+=`<div class="card">${d.stops.length?d.stops.map((s,i)=>stopHTML(s,i,d,{edit:1,d:selDay})).join(''):'<div class="muted">No stops yet.</div>'}</div>`;
   if(d.planB&&d.planB.length)h+=`<div class="card"><h2>🌧️ Plan B</h2><ul class="small">${d.planB.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
-  if(trip.flex&&trip.flex.length)h+=`<div class="card"><h2>🎲 Flex pool</h2><div class="muted small">Swap any of these in on a free afternoon.</div><ul class="small">${trip.flex.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
+  if(trip.flex&&trip.flex.length)h+=`<div class="card"><h2>🎲 Flex pool</h2><div class="muted small">Swap any of these in on a free afternoon.</div><div class="list small">${trip.flex.map((p,k)=>`<div class="between"><span>${esc(p)}</span><button class="btn sm" onclick="editStop(${selDay},-1,trip.flex[${k}])">＋ Add</button></div>`).join('')}</div></div>`;
   $('#main').innerHTML=h;}
-function editStop(di,si){const d=trip.days[di],s=si>=0?d.stops[si]:{time:'',name:'',verified:{ok:false}};
+function editStop(di,si,preName){const d=trip.days[di],s=si>=0?d.stops[si]:{time:'',name:preName||'',verified:{ok:false}};
   const legTxt=(s.transitTo&&s.transitTo.steps||[]).map(x=>[x.mode,x.mins||'',x.fare||'',x.text].join(' | ')).join('\n');
   openSheet(`<h2>${si>=0?'Edit stop':'Add stop'}</h2>
   <div class="row"><div style="flex:1"><label>Start (24h, e.g. 14:30 · after midnight use 25:00+)</label><input id="fT" value="${esc(s.time)}" inputmode="numeric" placeholder="10:00"></div><div style="flex:1"><label>End (optional)</label><input id="fE" value="${esc(s.end||'')}" placeholder="11:00"></div></div>
@@ -299,7 +302,7 @@ async function optimize(di){const d=trip.days[di],msgs=[];let st=d.stops;
   if(w)msgs.push(`${w} short hop${w>1?'s':''} switched to walking`);
   saveTrip();render();await checkTiming(di,msgs.length?msgs.join(' · ')+'. ':'Already efficient. ')}
 async function checkTiming(di,pre){pre=pre||'';const st=trip.days[di].stops,shift=[],bad=[];let prevEnd=null;
-  for(let i=0;i<st.length;i++){const s=st[i],t=toMin(s.time);if(t==null)continue;let start=t;
+  for(let i=0;i<st.length;i++){const s=st[i],t=toMin(s.time);if(t==null||s.skipped)continue;let start=t;
     if(i>0&&prevEnd!=null){const arr=prevEnd+(legChoice(st[i-1],s).mins||0);
       if(arr>t+2){if(s.locked)bad.push(`🔒 ${s.name}: you'd get there ~${t12(minTo(arr))}, but it's booked for ${t12(s.time)}.`);else{start=Math.ceil(arr/5)*5;shift.push({i,start,by:start-t})}}}
     const dur=(s.end&&toMin(s.end)!=null)?Math.max(0,toMin(s.end)-t):0;prevEnd=start+dur}
@@ -309,6 +312,21 @@ async function checkTiming(di,pre){pre=pre||'';const st=trip.days[di].stops,shif
   if(!await ask(pre+'Some stops start before you can get there:\n'+lines.join('\n')+'\nPush those stops later?','Push later'))return;
   shift.forEach(x=>{const s=st[x.i];if(s.end&&toMin(s.end)!=null)s.end=minRaw(toMin(s.end)+x.by);s.time=minRaw(x.start)});
   saveTrip();render();toast('Times updated')}
+
+/* ---------- backups, skip, tips ---------- */
+const SWAP=['name','address','lat','lon','hours','price','note','verified','cost','pinApprox','tips'];
+function showAlts(di,si){const s=trip.days[di].stops[si];
+  openSheet(`<h2>🔁 Backups for ${esc(s.name)}</h2><div class="small muted">Tap “Use this” to swap it in. Time and transit stay the same, and the current pick moves into backups.</div>
+  <div class="list" style="margin-top:8px">${s.alts.map((a,k)=>`<div><b>${esc(a.name)}</b>${a.address?`<div class="small muted">📍 ${esc(a.address)}</div>`:''}${a.hours?`<div class="small muted">🕘 ${esc(a.hours)}</div>`:''}${a.price?`<div class="small">💴 ${esc(a.price)}</div>`:''}${a.note?`<div class="small">${esc(a.note)}</div>`:''}
+  <div class="row" style="margin-top:6px"><button class="btn sm pri" onclick="useAlt(${di},${si},${k})">Use this</button><a class="btn sm" href="${dirURL(a)}" target="_blank" rel="noopener">🧭 Directions</a></div></div>`).join('')}</div>
+  <button class="btn ghost" style="margin-top:10px" onclick="closeSheet()">Close</button>`)}
+function useAlt(di,si,k){const s=trip.days[di].stops[si],a=s.alts[k],cur={};SWAP.forEach(f=>{if(s[f]!==undefined)cur[f]=s[f]});
+  SWAP.forEach(f=>{if(a[f]!==undefined)s[f]=a[f];else delete s[f]});s.alts.splice(k,1);s.alts.unshift(cur);
+  if(s.transitTo&&s.transitTo.steps&&s.transitTo.steps.length)s.transitTo.note=(s.transitTo.note?s.transitTo.note+' ':'')+'(Planned from the original pick, so double-check with Live directions.)';
+  saveTrip();closeSheet();render();toast('Swapped to '+s.name)}
+function toggleSkip(di,si){const s=trip.days[di].stops[si];s.skipped=!s.skipped;saveTrip();render();toast(s.skipped?'Skipped':'Back in the plan')}
+const tipById=id=>(trip&&trip.tips||[]).find(t=>t.id===id);
+function openTip(id){const t=tipById(id);if(!t)return;openSheet(`<h2>${esc(t.icon||'💡')} ${esc(t.title)}</h2><div style="white-space:pre-line;line-height:1.55">${esc(t.body)}</div><button class="btn" style="margin-top:14px" onclick="closeSheet()">Got it</button>`)}
 
 /* ---------- MAP ---------- */
 function rMap(){$('#main').innerHTML=dayChips(true)+`<div id="map"></div><div class="row" style="margin-top:10px"><button class="btn sm" onclick="locate()">📍 Where am I</button><span class="small muted">Lines connect stops in order. Orange pins = still need checking.</span></div>`;
@@ -369,8 +387,9 @@ async function delSpend(id){if(!await ask('Delete this entry?','Delete'))return;
 
 /* ---------- INFO ---------- */
 let infoView='bookings';
-function rInfo(){const views={bookings:'Bookings',check:'Needs checking',dates:'Deadlines',taxi:'Taxi cards',help:'Emergency & phrases',data:'Data'};
+function rInfo(){const views={tips:'💡 How Japan works',bookings:'Bookings',check:'Needs checking',dates:'Deadlines',taxi:'Taxi cards',help:'Emergency & phrases',data:'Data'};
   const unv=unverified();let h=`<div class="chips">${Object.entries(views).map(([k,v])=>`<button class="chip ${infoView===k?'on':''}" onclick="infoView='${k}';render()">${v}${k==='check'&&unv.length?` (${unv.length})`:''}</button>`).join('')}</div>`;
+  if(infoView==='tips'){const T=trip.tips||[];h+=T.length?`<div class="card small muted">Things that work differently from back home. Tap one to read it.</div><div class="card list">${T.map(t=>`<div class="between" onclick="openTip('${esc(t.id)}')" style="cursor:pointer"><span><b>${esc(t.icon||'💡')} ${esc(t.title)}</b><div class="small muted">${esc(t.short||'')}</div></span><span class="muted">›</span></div>`).join('')}</div>`:'<div class="card muted">No tips in this trip file yet.</div>';}
   if(infoView==='bookings'){
     h+=`<div class="card"><h2>✈️ Flights</h2>${(trip.flights||[]).map(f=>`<div style="margin-bottom:10px"><div class="between"><b>${esc(f.flight)} · ${esc(f.from)} → ${esc(f.to)}</b>${vBadge(f.verified)}</div><div class="small">${dLabel(f.date)} · ${esc(t12(f.dep))} → ${esc(t12(f.arr))}${f.arrDate&&f.arrDate!==f.date?' (+1 day)':''}</div>${f.note?`<div class="small muted">${esc(f.note)}</div>`:''}</div>`).join('')}${trip.flightConf?`<div class="small">Confirmation: <b>${esc(trip.flightConf)}</b></div>`:''}</div>`;
     h+=`<div class="card"><h2>🛏️ Where you're staying</h2>${(trip.stays||[]).map(s=>`<div style="margin-bottom:12px"><div class="between"><b>${esc(s.name)}</b>${vBadge(s.verified)}</div>
