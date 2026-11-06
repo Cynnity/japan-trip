@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Japan Trip">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<title>Japan Trip</title>
+<style>
+:root{--bg:#0f1220;--card:#181c2e;--card2:#222840;--text:#eef0f7;--muted:#9aa0b8;--accent:#ff4d6d;--accent2:#5fd4e6;--ok:#3ddc97;--warn:#ffb347;--line:#2a3048}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:700;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:rgba(15,18,32,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+h1{font-size:20px;margin:0;letter-spacing:-.2px}
+h2{font-size:17px;margin:2px 0 10px}
+h3{font-size:15px;margin:0 0 4px}
+main{padding:12px 16px;max-width:720px;margin:0 auto}
+.card{background:var(--card);border-radius:16px;padding:14px;margin:0 0 12px}
+.muted{color:var(--muted);font-size:14px}
+.small{font-size:13px}
+a{color:var(--accent2);text-decoration:none}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:800;display:flex;background:#12162a;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;color:var(--muted);padding:8px 0 7px;font:600 11px/1 inherit;display:flex;flex-direction:column;align-items:center;gap:4px}
+nav button .i{font-size:21px;line-height:1}
+nav button.on{color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:6px;background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:500 15px/1.1 inherit;cursor:pointer}
+.btn.sm{padding:6px 9px;font-size:13px}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{background:none}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.between{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:0 0 10px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;background:var(--card);color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:7px 11px;font:600 13px/1 inherit}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.stop{position:relative;padding:0 0 14px 18px;margin-left:5px;border-left:2px solid var(--line)}
+.stop:last-child{border-left-color:transparent}
+.stop::before{content:"";position:absolute;left:-7px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--card2);border:2px solid var(--muted)}
+.stop.now::before{background:var(--accent);border-color:var(--accent)}
+.stop.done{opacity:.55}
+.time{font-weight:700;color:var(--accent2);font-size:13px}
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:99px;background:var(--card2);color:var(--muted);vertical-align:middle}
+.badge.ok{color:var(--ok)}.badge.warn{color:var(--warn)}.badge.lock{color:var(--accent)}
+.okc{color:var(--ok)}.warnc{color:var(--warn)}
+.leg{font-size:14px;color:var(--muted);background:var(--card2);border-radius:12px;padding:8px 10px;margin:8px 0 0}
+.leg ol{margin:4px 0 0;padding-left:20px}.leg li{margin:2px 0}
+.big{font-size:30px;font-weight:800;letter-spacing:-.5px}
+.jp{font-size:30px;line-height:1.45;font-weight:700;word-break:break-all}
+.bar{height:8px;background:var(--card2);border-radius:99px;overflow:hidden;margin:6px 0 2px}.bar>i{display:block;height:100%;background:var(--ok)}
+.bar.over>i{background:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:14px}td{padding:7px 0;border-bottom:1px solid var(--line);vertical-align:top}td:last-child{text-align:right}
+#map{height:calc(100vh - 230px);min-height:320px;border-radius:16px;z-index:1}
+.leaflet-container{background:#1b2036}
+.pin{background:var(--accent);color:#fff;border:2px solid #fff;border-radius:50%;width:26px!important;height:26px!important;display:flex;align-items:center;justify-content:center;font:700 12px/1 sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.pin.unv{background:var(--warn);color:#222}
+.me{background:#3b82f6;border:3px solid #fff;border-radius:50%;width:18px!important;height:18px!important;box-shadow:0 0 0 6px rgba(59,130,246,.25)}
+.modal{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
+.hidden{display:none!important}
+.sheet{background:var(--card);width:100%;max-width:720px;max-height:90vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom))}
+label{display:block;font-size:13px;color:var(--muted);margin-top:4px}
+input,select,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:16px inherit;margin:4px 0 8px}
+textarea{min-height:80px}
+.check{display:flex;align-items:center;gap:8px;margin:6px 0 10px}.check input{width:auto;margin:0}
+.tabs2{display:flex;gap:6px;margin-bottom:10px}
+.hr{height:1px;background:var(--line);margin:10px 0}
+.wx{display:flex;gap:14px;align-items:center}
+.wx .t{font-size:28px;font-weight:800}
+.list>div{padding:8px 0;border-bottom:1px solid var(--line)}.list>div:last-child{border:0}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000;color:#fff;padding:10px 14px;border-radius:12px;z-index:3000;font-size:14px}
+</style>
+</head>
+<body>
+<header><h1 id="hTitle">Japan Trip</h1><div id="hSub" class="muted small"></div></header>
+<main id="main"></main>
+<nav id="nav">
+  <button data-tab="today"><span class="i">☀️</span>Today</button>
+  <button data-tab="days"><span class="i">🗓️</span>Days</button>
+  <button data-tab="map"><span class="i">🗺️</span>Map</button>
+  <button data-tab="money"><span class="i">💴</span>Money</button>
+  <button data-tab="info"><span class="i">ℹ️</span>Info</button>
+</nav>
+<div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
+<input type="file" id="fileIn" accept=".json,application/json,text/plain" hidden>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+          set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){toast('Could not save on this device');return false}}};
+const TZ='Asia/Tokyo';
+let trip=LS.get('jt_trip',null), spend=LS.get('jt_spend',[]), rate=LS.get('jt_rate',null);
+let tab=LS.get('jt_tab','today'), selDay=null, map=null, meMarker=null, watchId=null, clockTimer=null;
+const saveTrip=()=>LS.set('jt_trip',trip), saveSpend=()=>LS.set('jt_spend',spend);
+function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
+function nowIn(tz){const f=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+  const p=Object.fromEntries(f.formatToParts(new Date()).map(x=>[x.type,x.value]));return{date:`${p.year}-${p.month}-${p.day}`,mins:(+p.hour%24)*60+ +p.minute}}
+const toMin=t=>{if(!t||!/^\d{1,2}:\d{2}$/.test(t))return null;const[h,m]=t.split(':').map(Number);return h*60+m};
+const minTo=m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
+const t12=t=>{const m=toMin(t);if(m===null)return t||'';let h=Math.floor(m/60)%24;const ap=h>=12?'PM':'AM';h=h%12||12;return `${h}:${String(m%60).padStart(2,'0')} ${ap}`};
+const dLabel=(d,o)=>new Date(d+'T12:00:00Z').toLocaleDateString('en-US',Object.assign({weekday:'short',month:'short',day:'numeric',timeZone:'UTC'},o||{}));
+const dayDiff=(a,b)=>Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/864e5);
+const usdPerJpy=()=>(rate&&rate.v)||(trip&&trip.fallbackUsdPerJpy)||0.0065;
+const toUSD=(a,c)=>c==='USD'?+a:+a*usdPerJpy();
+const usd=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{maximumFractionDigits:0});
+const yen=n=>'¥'+Math.round(n).toLocaleString('en-US');
+const legMins=l=>l&&l.steps?l.steps.reduce((a,s)=>a+(+s.mins||0),0):0;
+const legFare=l=>l&&l.steps?l.steps.reduce((a,s)=>a+(+s.fare||0),0):0;
+const isOk=v=>v&&v.ok;
+const today=()=>nowIn(TZ).date;
+const uid=()=>Math.random().toString(36).slice(2,9);
+function dirURL(s){const dest=(isOk(s.verified)&&s.lat&&!s.pinApprox)?`${s.lat},${s.lon}`:encodeURIComponent([s.name,s.address].filter(Boolean).join(', '));
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=transit`}
+function legURL(a,b){const p=s=>(isOk(s.verified)&&s.lat&&!s.pinApprox)?`${s.lat},${s.lon}`:encodeURIComponent([s.name,s.address].filter(Boolean).join(', '));
+  return `https://www.google.com/maps/dir/?api=1&origin=${p(a)}&destination=${p(b)}&travelmode=transit`}
+function dist(a,b){if(!a||!b||a.lat==null||b.lat==null)return null;const R=6371,r=x=>x*Math.PI/180,dLa=r(b.lat-a.lat),dLo=r(b.lon-a.lon);
+  const h=Math.sin(dLa/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+const routeKm=st=>{let d=0;for(let i=1;i<st.length;i++){const x=dist(st[i-1],st[i]);if(x!=null)d+=x}return d};
+function vBadge(v){return isOk(v)?`<span class="badge ok">✅ Verified${v.src?' · '+esc(v.src):''}</span>`:`<span class="badge warn">⚠️ Check this</span>`}
+
+/* ---------- render core ---------- */
+function setTab(t){tab=t;LS.set('jt_tab',t);render();window.scrollTo(0,0)}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+function render(){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  if(map){map.remove();map=null;meMarker=null}
+  if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null}
+  clearInterval(clockTimer);
+  if(!trip||!Array.isArray(trip.days)){$('#hTitle').textContent='Japan Trip';$('#hSub').textContent='No trip loaded yet';$('#main').innerHTML=welcome();return}
+  $('#hTitle').textContent=trip.name||'My Trip';
+  const t=today(),s=trip.days[0].date,e=trip.days[trip.days.length-1].date,i=trip.days.findIndex(d=>d.date===t);
+  $('#hSub').textContent=t<s?`${dayDiff(t,s)} days to go`:t>e?'Trip complete':`Day ${i+1} of ${trip.days.length} · ${trip.days[i].city||''}`;
+  if(selDay==null){selDay=i>=0?i:0}
+  ({today:rToday,days:rDays,map:rMap,money:rMoney,info:rInfo}[tab]||rToday)();
+}
+function welcome(){return `<div class="card"><h2>Welcome 👋</h2>
+  <p class="muted">This app holds no trip info on its own, so it's safe to keep public. Load your private trip file and it's saved only on this phone.</p>
+  <button class="btn pri" onclick="pickFile()">📂 Import trip file</button></div>
+  <div class="card muted small">Tip: in Safari, tap Share → <b>Add to Home Screen</b> to use this like an app. After it loads once, it works offline.</div>`}
+
+/* ---------- stop + leg blocks ---------- */
+function legHTML(l,a,b){if(!l)return '';
+  const steps=(l.steps||[]).map(s=>`<li>${({walk:'🚶',train:'🚆',subway:'🚇',bus:'🚌',taxi:'🚕',ferry:'⛴️',ropeway:'🚡',plane:'✈️'}[s.mode]||'➡️')} ${esc(s.text)}${s.mins?` <span class="small">· ${s.mins} min</span>`:''}${s.fare?` <span class="small">· ~${yen(s.fare)}</span>`:''}</li>`).join('');
+  const m=legMins(l),f=legFare(l);
+  return `<div class="leg"><div class="between"><b>Getting to next stop</b><span class="small">${m?m+' min':''}${f?' · ~'+yen(f):''}</span></div>
+  ${steps?`<ol>${steps}</ol>`:''}${l.note?`<div class="small">${esc(l.note)}</div>`:''}${l.lastTrain?`<div class="small warnc">🌙 Last train: ${esc(l.lastTrain)}</div>`:''}
+  ${a&&b?`<div style="margin-top:6px"><a class="small" href="${legURL(a,b)}" target="_blank" rel="noopener">Live directions in Google Maps →</a></div>`:''}</div>`}
+function stopHTML(s,i,day,o){o=o||{};
+  return `<div class="stop ${o.cls||''}"><div class="between"><span class="time">${esc(t12(s.time))}${s.end?' – '+esc(t12(s.end)):''}</span>
+  <span>${s.locked?'<span class="badge lock">🔒 Booked</span> ':''}${vBadge(s.verified)}</span></div>
+  <h3>${esc(s.name)}</h3>
+  ${s.address?`<div class="muted small">📍 ${esc(s.address)}${s.pinApprox?' <span class="warnc">(map pin approximate)</span>':''}</div>`:''}
+  ${s.hours?`<div class="muted small">🕘 ${esc(s.hours)}</div>`:''}
+  ${s.price?`<div class="small">💴 ${esc(s.price)}</div>`:''}
+  ${s.note?`<div class="small" style="margin-top:4px">${esc(s.note)}</div>`:''}
+  <div class="row" style="margin-top:8px"><a class="btn sm" href="${dirURL(s)}" target="_blank" rel="noopener">🧭 Directions</a>
+  ${o.edit?`<button class="btn sm" onclick="editStop(${o.d},${i})">✏️ Edit</button>`:''}</div>
+  ${legHTML(s.transitTo,s,day.stops[i+1])}</div>`}
+function dayCost(d){let y=0;d.stops.forEach(s=>{y+=+s.cost||0;y+=legFare(s.transitTo)});return y}
+
+/* ---------- TODAY ---------- */
+function rToday(){
+  const n=nowIn(TZ),s=trip.days[0].date,e=trip.days[trip.days.length-1].date,i=trip.days.findIndex(d=>d.date===n.date);let h='';
+  if(n.date<s){
+    const left=dayDiff(n.date,s);
+    h+=`<div class="card"><div class="muted">Countdown</div><div class="big">${left} day${left===1?'':'s'}</div><div class="muted">until ${esc(trip.arrivalLabel||('Day 1 · '+dLabel(s)))}</div></div>`;
+    const up=(trip.deadlines||[]).filter(x=>!x.done&&x.date>=n.date).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,4);
+    if(up.length)h+=`<div class="card"><h2>⏰ Coming up</h2><div class="list">${up.map(x=>`<div><div class="between"><b>${esc(x.title)}</b><span class="small muted">${dLabel(x.date)}</span></div>${x.note?`<div class="small muted">${esc(x.note)}</div>`:''}</div>`).join('')}</div><button class="btn sm ghost" onclick="setTab('info')">All deadlines →</button></div>`;
+    h+=wxCard(trip.days[0]);
+    h+=`<div class="card"><h2>Day 1 preview · ${dLabel(s)}</h2>${trip.days[0].stops.map((x,j)=>stopHTML(x,j,trip.days[0])).join('')}</div>`;
+  }else if(i<0){
+    h+=`<div class="card"><div class="big">おかえり! 🏠</div><p class="muted">Trip complete. Your spending log and haul are still in the Money tab.</p></div>`;
+  }else{
+    const d=trip.days[i],st=d.stops;let cur=-1,nx=-1;
+    st.forEach((x,j)=>{const m=toMin(x.time);if(m!==null&&m<=n.mins)cur=j});
+    nx=st.findIndex((x,j)=>j>cur&&toMin(x.time)!==null&&toMin(x.time)>n.mins);
+    h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}</div><h2 style="margin:2px 0 6px">${esc(d.title)}</h2>`;
+    if(nx>=0){const nxt=st[nx],travel=cur>=0?legMins(st[cur].transitTo):0,leave=toMin(nxt.time)-travel,until=leave-n.mins;
+      h+=`<div class="hr"></div><div class="muted small">Next up</div><div style="font-size:20px;font-weight:700">${esc(nxt.name)}</div>
+      <div>${t12(nxt.time)}${travel?` · <b class="${until<=15?'warnc':''}">leave by ${t12(minTo(leave))}</b>`:''}</div>
+      <div class="muted small">${until>0?`in ${Math.floor(until/60)?Math.floor(until/60)+'h ':''}${until%60}m`:'time to go!'}</div>`}
+    else h+=`<div class="muted">Nothing else scheduled. Free time! 🎉</div>`;
+    h+=`</div>`;
+    if(cur>=0&&st[cur].transitTo)h+=`<div class="card"><h2>🚆 How to get there</h2>${legHTML(st[cur].transitTo,st[cur],st[cur+1])}</div>`;
+    h+=wxCard(d);
+    h+=`<div class="card"><div class="between"><h2>Today's plan</h2><span class="small muted">${d.walk?'🚶 '+esc(d.walk):''}</span></div>${st.map((x,j)=>stopHTML(x,j,d,{cls:j===cur?'now':(j<cur?'done':'')})).join('')}</div>`;
+    if(d.planB&&d.planB.length)h+=`<div class="card"><h2>🌧️ Plan B</h2><ul class="small">${d.planB.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
+  }
+  h+=clockCard();
+  $('#main').innerHTML=h;loadWx();clockTimer=setInterval(tickClocks,20000);
+}
+function clockCard(){return `<div class="card"><div class="between"><div><div class="muted small">🇯🇵 Japan</div><div id="ckJ" style="font-size:22px;font-weight:700"></div></div>
+  <div style="text-align:right"><div class="muted small">🏠 ${esc(trip.homeLabel||'Home')}</div><div id="ckH" style="font-size:22px;font-weight:700"></div></div></div></div>`}
+function tickClocks(){const f=tz=>new Date().toLocaleString('en-US',{timeZone:tz,weekday:'short',hour:'numeric',minute:'2-digit'});
+  const j=$('#ckJ'),h=$('#ckH');if(j)j.textContent=f(TZ);if(h)h.textContent=f(trip.homeTz||'America/New_York')}
+setInterval(()=>{if(tab==='today'&&trip)tickClocks()},20000);
+
+/* ---------- weather ---------- */
+const WMO=c=>c===0?['☀️','Clear']:c<=2?['🌤️','Partly cloudy']:c===3?['☁️','Cloudy']:c<=48?['🌫️','Fog']:c<=57?['🌦️','Drizzle']:c<=67?['🌧️','Rain']:c<=77?['🌨️','Snow']:c<=82?['🌧️','Showers']:c<=86?['🌨️','Snow showers']:['⛈️','Storms'];
+function wxCard(d){const w=d.wx||[35.68,139.76];return `<div class="card" id="wxCard" data-lat="${w[0]}" data-lon="${w[1]}" data-city="${esc(d.city||'')}"><div class="muted small">Weather · ${esc(d.city||'')}</div><div id="wxBody" class="muted small">Loading…</div></div>`}
+async function loadWx(){const c=$('#wxCard');if(!c)return;const la=c.dataset.lat,lo=c.dataset.lon,key='jt_wx_'+la+'_'+lo;let data=LS.get(key,null);
+  try{if(!data||Date.now()-data.t>30*60e3){const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&timezone=Asia%2FTokyo&forecast_days=3`);
+    if(!r.ok)throw 0;data={t:Date.now(),j:await r.json()};LS.set(key,data)}}catch(e){if(!data){$('#wxBody').textContent='Weather unavailable offline';return}}
+  const j=data.j,[ic,txt]=WMO(j.current.weather_code),D=j.daily;const b=$('#wxBody');if(!b)return;
+  b.classList.remove('muted','small');
+  b.innerHTML=`<div class="wx"><div style="font-size:38px">${ic}</div><div><div class="t">${Math.round(j.current.temperature_2m)}°F</div><div class="muted small">${txt} · H ${Math.round(D.temperature_2m_max[0])}° L ${Math.round(D.temperature_2m_min[0])}° · 💧${D.precipitation_probability_max[0]??0}%</div></div></div>
+  <div class="row small muted" style="margin-top:8px">${D.time.slice(1).map((t,k)=>`<span>${dLabel(t,{weekday:'short',month:undefined,day:undefined})} ${WMO(D.weather_code[k+1])[0]} ${Math.round(D.temperature_2m_max[k+1])}°/${Math.round(D.temperature_2m_min[k+1])}°</span>`).join(' · ')}</div>
+  ${!trip.days.some(d=>d.date===today())?'<div class="small muted" style="margin-top:6px">Current weather there now (forecast for your dates shows ~2 weeks out).</div>':''}`}
+
+/* ---------- DAYS ---------- */
+function dayChips(all){return `<div class="chips">${all?`<button class="chip ${selDay===-1?'on':''}" onclick="selDay=-1;render()">All</button>`:''}${trip.days.map((d,i)=>`<button class="chip ${i===selDay?'on':''}" onclick="selDay=${i};render()">${dLabel(d.date,{weekday:undefined})}</button>`).join('')}</div>`}
+function rDays(){if(selDay<0)selDay=0;const d=trip.days[selDay],c=dayCost(d);
+  let h=dayChips(false);
+  h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}${d.stay?' · 🛏️ '+esc(d.stay):''}</div><h2 style="margin:2px 0 4px">${esc(d.title)}</h2>
+  <div class="row small muted">${d.walk?`<span>🚶 ${esc(d.walk)}</span>`:''}${c?`<span>💴 ~${yen(c)} (~${usd(toUSD(c,'JPY'))}) planned</span>`:''}</div>
+  <div class="row" style="margin-top:10px"><button class="btn sm" onclick="editStop(${selDay},-1)">＋ Add stop</button><button class="btn sm" onclick="optimize(${selDay})">⚡ Optimize order</button></div></div>`;
+  h+=`<div class="card">${d.stops.length?d.stops.map((s,i)=>stopHTML(s,i,d,{edit:1,d:selDay})).join(''):'<div class="muted">No stops yet.</div>'}</div>`;
+  if(d.planB&&d.planB.length)h+=`<div class="card"><h2>🌧️ Plan B</h2><ul class="small">${d.planB.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
+  if(trip.flex&&trip.flex.length)h+=`<div class="card"><h2>🎲 Flex pool</h2><div class="muted small">Swap any of these in on a free afternoon.</div><ul class="small">${trip.flex.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
+  $('#main').innerHTML=h;}
+function editStop(di,si){const d=trip.days[di],s=si>=0?d.stops[si]:{time:'',name:'',verified:{ok:false}};
+  const legTxt=(s.transitTo&&s.transitTo.steps||[]).map(x=>[x.mode,x.mins||'',x.fare||'',x.text].join(' | ')).join('\n');
+  openSheet(`<h2>${si>=0?'Edit stop':'Add stop'}</h2>
+  <div class="row"><div style="flex:1"><label>Start (24h, e.g. 14:30)</label><input id="fT" value="${esc(s.time)}" inputmode="numeric" placeholder="10:00"></div><div style="flex:1"><label>End (optional)</label><input id="fE" value="${esc(s.end||'')}" placeholder="11:00"></div></div>
+  <label>Name</label><input id="fN" value="${esc(s.name)}">
+  <label>Address</label><input id="fA" value="${esc(s.address||'')}">
+  <label>Price</label><input id="fP" value="${esc(s.price||'')}" placeholder="¥1,200 or Free">
+  <label>Planned cost in yen (number, for the day total)</label><input id="fC" value="${esc(s.cost||'')}" inputmode="numeric">
+  <label>Notes</label><textarea id="fNo">${esc(s.note||'')}</textarea>
+  <label>Getting to the next stop (one step per line: mode | mins | yen | what to do)</label>
+  <textarea id="fL" placeholder="walk | 8 | | Walk to Ōji Shrine&#10;train | 5 | 150 | JR Keihin-Tōhoku northbound, 1 stop">${esc(legTxt)}</textarea>
+  <div class="check"><input type="checkbox" id="fLk" ${s.locked?'checked':''}><label for="fLk" style="margin:0">🔒 Booked / fixed time (Optimize won't move it)</label></div>
+  <div class="check"><input type="checkbox" id="fV" ${isOk(s.verified)?'checked':''}><label for="fV" style="margin:0">✅ I've double-checked this address/info</label></div>
+  <div class="row" style="margin-top:6px"><button class="btn pri" onclick="saveStop(${di},${si})">Save</button>
+  ${si>=0?`<button class="btn" onclick="moveStop(${di},${si},-1)">↑</button><button class="btn" onclick="moveStop(${di},${si},1)">↓</button><button class="btn" style="color:var(--accent)" onclick="delStop(${di},${si})">Delete</button>`:''}
+  <button class="btn ghost" onclick="closeSheet()">Cancel</button></div>`)}
+function saveStop(di,si){const d=trip.days[di],old=si>=0?d.stops[si]:{};const v=id=>$(id).value.trim();
+  if(!v('#fN')){toast('Give it a name');return}
+  if(v('#fT')&&toMin(v('#fT'))===null){toast('Time must look like 14:30');return}
+  const steps=v('#fL').split('\n').map(l=>l.split('|').map(x=>x.trim())).filter(p=>p.length>=2&&p.join('')).map(p=>({mode:p[0]||'walk',mins:+p[1]||0,fare:+p[2]||0,text:p.slice(3).join(' | ')||p[0]}));
+  const addrChanged=v('#fA')!==(old.address||'');
+  const s=Object.assign({},old,{time:v('#fT'),end:v('#fE'),name:v('#fN'),address:v('#fA'),price:v('#fP'),cost:+v('#fC')||0,note:v('#fNo'),locked:$('#fLk').checked});
+  s.transitTo=steps.length?Object.assign({},old.transitTo||{},{steps}):(old.transitTo&&old.transitTo.lastTrain?{steps:[],lastTrain:old.transitTo.lastTrain}:null);
+  s.verified=$('#fV').checked?(isOk(old.verified)&&!addrChanged?old.verified:{ok:true,src:'You',date:today()}):{ok:false};
+  if(addrChanged&&old.lat!=null)s.pinApprox=true;
+  if(si>=0)d.stops[si]=s;else{d.stops.push(s);d.stops.sort((a,b)=>(toMin(a.time)??9999)-(toMin(b.time)??9999))}
+  saveTrip();closeSheet();render();toast('Saved')}
+function moveStop(di,si,dir){const st=trip.days[di].stops,j=si+dir;if(j<0||j>=st.length)return;[st[si],st[j]]=[st[j],st[si]];const t=st[si].time;st[si].time=st[j].time;st[j].time=t;saveTrip();closeSheet();render()}
+function delStop(di,si){if(!confirm('Delete this stop?'))return;trip.days[di].stops.splice(si,1);saveTrip();closeSheet();render()}
+function optimize(di){const d=trip.days[di],st=d.stops;if(st.length<3){toast('Not enough stops to reorder');return}
+  const times=st.map(s=>s.time),nextOf=new Map(st.map((s,i)=>[s,st[i+1]]));const out=[];let seg=[],anchor=null;
+  const nn=(from,arr)=>{const res=[],pool=arr.slice();let c=from;while(pool.length){let bi=0,bd=Infinity;pool.forEach((p,j)=>{const x=c?dist(c,p):0;const dd=x==null?1e6:x;if(dd<bd){bd=dd;bi=j}});c=pool.splice(bi,1)[0];res.push(c)}return res};
+  st.forEach((s,i)=>{if(s.locked||i===0){out.push(...nn(anchor,seg));seg=[];out.push(s);anchor=s}else seg.push(s)});out.push(...nn(anchor,seg));
+  const before=routeKm(st),after=routeKm(out);
+  if(after>=before-0.05){toast('Already in the best order 👍');return}
+  if(!confirm(`Reorder stops to cut about ${(before-after).toFixed(1)} km of zigzagging (${before.toFixed(1)} → ${after.toFixed(1)} km)? Booked stops stay put. Transit steps for moved stops will be cleared, so use Live directions for those.`))return;
+  out.forEach((s,i)=>{s.time=times[i];if(nextOf.get(s)!==out[i+1]&&s.transitTo){s.transitTo={steps:[],note:'Order changed. Tap Live directions.',lastTrain:s.transitTo.lastTrain}}});
+  d.stops=out;saveTrip();render();toast('Reordered')}
+
+/* ---------- MAP ---------- */
+function rMap(){$('#main').innerHTML=dayChips(true)+`<div id="map"></div><div class="row" style="margin-top:10px"><button class="btn sm" onclick="locate()">📍 Where am I</button><span class="small muted">Lines connect stops in order. Orange pins = still need checking.</span></div>`;
+  if(!window.L){$('#map').innerHTML='<div class="card muted">Map needs a connection the first time it loads.</div>';return}
+  map=L.map('map',{zoomControl:false}).setView([35.68,139.76],11);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  const days=selDay===-1?trip.days.map((d,i)=>i):[selDay],pts=[];const colors=['#ff4d6d','#5fd4e6','#ffb347','#3ddc97','#c084fc'];
+  days.forEach((di,k)=>{const d=trip.days[di],ll=[];let n=0;
+    d.stops.forEach((s,i)=>{if(s.lat==null)return;n++;const p=[s.lat,s.lon];ll.push(p);pts.push(p);
+      const m=L.marker(p,{icon:L.divIcon({className:'pin'+(isOk(s.verified)&&!s.pinApprox?'':' unv'),html:selDay===-1?String(di+1):String(n),iconSize:[26,26]})}).addTo(map);
+      m.bindPopup(`<b>${esc(s.name)}</b><br>${esc(t12(s.time))}${selDay===-1?' · '+dLabel(d.date):''}<br><a href="${dirURL(s)}" target="_blank" rel="noopener">Directions →</a>`)});
+    if(ll.length>1)L.polyline(ll,{color:colors[k%colors.length],weight:3,opacity:.8,dashArray:selDay===-1?'4 6':null}).addTo(map)});
+  if(pts.length)map.fitBounds(pts,{padding:[40,40],maxZoom:15});setTimeout(()=>map&&map.invalidateSize(),80)}
+function locate(){if(!navigator.geolocation){toast('Location not available');return}
+  watchId=navigator.geolocation.watchPosition(p=>{const ll=[p.coords.latitude,p.coords.longitude];if(!map)return;
+    if(!meMarker){meMarker=L.marker(ll,{icon:L.divIcon({className:'me',iconSize:[18,18]})}).addTo(map);map.setView(ll,15)}else meMarker.setLatLng(ll)},
+    ()=>toast('Allow location access to see yourself'),{enableHighAccuracy:true,maximumAge:15000})}
+
+/* ---------- MONEY ---------- */
+let moneyView='budget';
+function spentUSD(f){return spend.filter(f||(()=>1)).reduce((a,x)=>a+toUSD(x.amount,x.cur),0)}
+function rMoney(){const b=trip.budget||{categories:[]},t=today();let h=`<div class="tabs2">${['budget','log','haul'].map(v=>`<button class="chip ${moneyView===v?'on':''}" onclick="moneyView='${v}';render()">${{budget:'Budget',log:'Spending',haul:'Haul & tax-free'}[v]}</button>`).join('')}</div>`;
+  h+=`<button class="btn pri" style="width:100%;justify-content:center;margin-bottom:12px" onclick="addSpend()">＋ Log a purchase</button>`;
+  if(moneyView==='budget'){const committed=b.categories.reduce((a,c)=>a+(+c.committed||0),0),sp=spentUSD(),left=(+b.remaining||0)-committed-sp,todaySp=spentUSD(x=>x.date===t),daily=+b.dailyFood||0;
+    h+=`<div class="card"><div class="muted small">Trip money left</div><div class="big ${left<0?'warnc':''}">${usd(left)}</div><div class="muted small">of ${usd(+b.remaining||0)} after prepaid stuff · ${usd(committed)} booked · ${usd(sp)} logged</div></div>`;
+    h+=`<div class="card"><div class="between"><div><div class="muted small">Spent today</div><div style="font-size:22px;font-weight:700">${usd(todaySp)}</div></div><div style="text-align:right"><div class="muted small">Daily food target</div><div style="font-size:22px;font-weight:700">${usd(daily)}</div></div></div>
+    <div class="bar ${todaySp>daily?'over':''}"><i style="width:${Math.min(100,daily?todaySp/daily*100:0)}%"></i></div></div>`;
+    h+=`<div class="card"><h2>By category</h2>${b.categories.map(c=>{const used=(+c.committed||0)+spentUSD(x=>x.cat===c.name),pct=c.amount?used/c.amount*100:0;
+      return `<div style="margin-bottom:10px"><div class="between small"><b>${esc(c.name)}</b><span>${usd(used)} / ${usd(c.amount)}</span></div><div class="bar ${pct>100?'over':''}"><i style="width:${Math.min(100,pct)}%"></i></div>${c.note?`<div class="small muted">${esc(c.note)}</div>`:''}</div>`}).join('')}</div>`;
+    h+=convCard();}
+  if(moneyView==='log'){const byDay={};spend.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.ts-a.ts).forEach(x=>(byDay[x.date]=byDay[x.date]||[]).push(x));
+    h+=Object.keys(byDay).length?Object.entries(byDay).map(([d,xs])=>`<div class="card"><div class="between"><h2>${dLabel(d)}</h2><b>${usd(xs.reduce((a,x)=>a+toUSD(x.amount,x.cur),0))}</b></div><div class="list">${xs.map(x=>`<div class="between" onclick="editSpend('${x.id}')"><div><b>${esc(x.item||x.cat)}</b><div class="small muted">${esc(x.cat)}${x.store?' · '+esc(x.store):''}${x.taxFree?' · 🧾 tax-free':''}</div></div><div style="text-align:right">${x.cur==='USD'?usd(x.amount):yen(x.amount)}<div class="small muted">${x.cur==='USD'?'':usd(toUSD(x.amount,'JPY'))}</div></div></div>`).join('')}</div></div>`).join(''):'<div class="card muted">Nothing logged yet. Tap “Log a purchase” after you buy something.</div>';}
+  if(moneyView==='haul'){const haul=spend.filter(x=>x.cat==='Shopping & gifts');
+    const stores={};haul.forEach(x=>{if(x.cur!=='JPY')return;const k=x.date+'|'+(x.store||'?');stores[k]=(stores[k]||0)+ +x.amount});
+    h+=`<div class="card"><h2>🧾 Tax-free tracker</h2><div class="small muted">¥5,000+ at one store in one day qualifies. Show your passport at checkout, keep items sealed, and claim the refund at the Narita kiosk before check-in.</div><div class="list" style="margin-top:6px">${Object.entries(stores).map(([k,v])=>{const[d,s]=k.split('|');return `<div class="between"><div><b>${esc(s)}</b><div class="small muted">${dLabel(d)}</div></div><div>${yen(v)} ${v>=5000?'<span class="badge ok">✓ eligible</span>':`<span class="badge">${yen(5000-v)} to go</span>`}</div></div>`}).join('')||'<div class="muted small">Log purchases with a store name to track this.</div>'}</div></div>`;
+    h+=`<div class="card"><h2>🛍️ My haul (${haul.length})</h2><div class="list">${haul.map(x=>`<div class="between" onclick="editSpend('${x.id}')"><div><b>${esc(x.item||'Item')}</b><div class="small muted">${esc(x.store||'')} · ${dLabel(x.date)}${x.forWho?' · for '+esc(x.forWho):''}</div></div><div>${x.cur==='USD'?usd(x.amount):yen(x.amount)}</div></div>`).join('')||'<div class="muted small">Nothing yet. Go shopping! 🛒</div>'}</div></div>`;
+    if(trip.shoppingList&&trip.shoppingList.length)h+=`<div class="card"><h2>📝 Shopping list</h2>${trip.shoppingList.map((x,i)=>`<div class="check"><input type="checkbox" id="sl${i}" ${x.got?'checked':''} onchange="trip.shoppingList[${i}].got=this.checked;saveTrip()"><label for="sl${i}" style="margin:0;color:var(--text)">${esc(x.item)}${x.forWho?` <span class="muted small">for ${esc(x.forWho)}</span>`:''}</label></div>`).join('')}</div>`;}
+  $('#main').innerHTML=h;refreshRate();}
+function convCard(){return `<div class="card"><h2>💱 Converter</h2><div class="row"><div style="flex:1"><label>Yen</label><input id="cY" inputmode="decimal" oninput="$('#cU').value=this.value?(this.value*usdPerJpy()).toFixed(2):''"></div><div style="flex:1"><label>Dollars</label><input id="cU" inputmode="decimal" oninput="$('#cY').value=this.value?Math.round(this.value/usdPerJpy()):''"></div></div>
+  <div class="small muted" id="rateTxt">¥1,000 ≈ $${(1000*usdPerJpy()).toFixed(2)}${rate?` · rate from ${new Date(rate.t).toLocaleDateString()}`:' · saved estimate'}</div></div>`}
+async function refreshRate(){if(rate&&Date.now()-rate.t<6*3600e3)return;try{const r=await fetch('https://open.er-api.com/v6/latest/USD');const j=await r.json();if(j&&j.rates&&j.rates.JPY){rate={v:1/j.rates.JPY,t:Date.now()};LS.set('jt_rate',rate);const el=$('#rateTxt');if(el)el.textContent=`¥1,000 ≈ $${(1000*rate.v).toFixed(2)} · live rate`}}catch(e){}}
+function addSpend(){editSpend(null)}
+function editSpend(id){const x=id?spend.find(s=>s.id===id):{date:today(),cur:'JPY',cat:'Food & local trains'};const cats=(trip.budget&&trip.budget.categories||[]).map(c=>c.name);
+  openSheet(`<h2>${id?'Edit purchase':'Log a purchase'}</h2>
+  <div class="row"><div style="flex:2"><label>Amount</label><input id="sA" inputmode="decimal" value="${esc(x.amount??'')}" placeholder="1200"></div><div style="flex:1"><label>Currency</label><select id="sC"><option ${x.cur==='JPY'?'selected':''}>JPY</option><option ${x.cur==='USD'?'selected':''}>USD</option></select></div></div>
+  <label>Category</label><select id="sK">${cats.map(c=>`<option ${c===x.cat?'selected':''}>${esc(c)}</option>`).join('')}</select>
+  <label>What was it?</label><input id="sI" value="${esc(x.item||'')}" placeholder="Ramen, Miku figure, train ticket…">
+  <label>Store (needed for tax-free tracking)</label><input id="sS" value="${esc(x.store||'')}" placeholder="Pokémon Center Shibuya">
+  <label>For who? (gifts)</label><input id="sW" value="${esc(x.forWho||'')}" placeholder="Me, Mom, sister…">
+  <label>Date</label><input id="sD" type="date" value="${esc(x.date)}">
+  <div class="check"><input type="checkbox" id="sT" ${x.taxFree?'checked':''}><label for="sT" style="margin:0">🧾 Bought tax-free (keep sealed, refund at airport)</label></div>
+  <div class="row"><button class="btn pri" onclick="saveSpendEntry('${id||''}')">Save</button>${id?`<button class="btn" style="color:var(--accent)" onclick="delSpend('${id}')">Delete</button>`:''}<button class="btn ghost" onclick="closeSheet()">Cancel</button></div>`);
+  setTimeout(()=>{const a=$('#sA');if(a&&!id)a.focus()},50)}
+function saveSpendEntry(id){const a=parseFloat($('#sA').value);if(!(a>0)){toast('Enter an amount');return}
+  const e={id:id||uid(),ts:Date.now(),amount:a,cur:$('#sC').value,cat:$('#sK').value,item:$('#sI').value.trim(),store:$('#sS').value.trim(),forWho:$('#sW').value.trim(),date:$('#sD').value||today(),taxFree:$('#sT').checked};
+  const i=spend.findIndex(s=>s.id===id);if(i>=0)spend[i]=e;else spend.push(e);saveSpend();closeSheet();render();toast('Logged')}
+function delSpend(id){if(!confirm('Delete this entry?'))return;spend=spend.filter(s=>s.id!==id);saveSpend();closeSheet();render()}
+
+/* ---------- INFO ---------- */
+let infoView='bookings';
+function rInfo(){const views={bookings:'Bookings',check:'Needs checking',dates:'Deadlines',taxi:'Taxi cards',help:'Emergency & phrases',data:'Data'};
+  const unv=unverified();let h=`<div class="chips">${Object.entries(views).map(([k,v])=>`<button class="chip ${infoView===k?'on':''}" onclick="infoView='${k}';render()">${v}${k==='check'&&unv.length?` (${unv.length})`:''}</button>`).join('')}</div>`;
+  if(infoView==='bookings'){
+    h+=`<div class="card"><h2>✈️ Flights</h2>${(trip.flights||[]).map(f=>`<div style="margin-bottom:10px"><div class="between"><b>${esc(f.flight)} · ${esc(f.from)} → ${esc(f.to)}</b>${vBadge(f.verified)}</div><div class="small">${dLabel(f.date)} · ${esc(t12(f.dep))} → ${esc(t12(f.arr))}${f.arrDate&&f.arrDate!==f.date?' (+1 day)':''}</div>${f.note?`<div class="small muted">${esc(f.note)}</div>`:''}</div>`).join('')}${trip.flightConf?`<div class="small">Confirmation: <b>${esc(trip.flightConf)}</b></div>`:''}</div>`;
+    h+=`<div class="card"><h2>🛏️ Where you're staying</h2>${(trip.stays||[]).map(s=>`<div style="margin-bottom:12px"><div class="between"><b>${esc(s.name)}</b>${vBadge(s.verified)}</div>
+      <div class="small">${dLabel(s.checkIn)} → ${dLabel(s.checkOut)}${s.room?' · '+esc(s.room):''}</div>
+      <div class="small muted">📍 ${esc(s.address)}</div>
+      <div class="small">🕓 Check-in ${esc(s.checkInTime||'')}${s.checkOutTime?' · Checkout '+esc(s.checkOutTime):''}</div>
+      <div class="small">💴 ${esc(s.price||'')}${s.charge?' · '+esc(s.charge):''}</div>
+      ${s.cancel?`<div class="small warnc">↩️ ${esc(s.cancel)}</div>`:''}${s.conf?`<div class="small">Confirmation: <b>${esc(s.conf)}</b></div>`:''}${s.note?`<div class="small muted">${esc(s.note)}</div>`:''}
+      <a class="small" href="${dirURL(s)}" target="_blank" rel="noopener">Directions →</a></div>`).join('')}</div>`;
+    h+=`<div class="card"><h2>🎟️ Tickets & experiences</h2>${(trip.bookings||[]).map(b=>`<div style="margin-bottom:10px"><div class="between"><b>${esc(b.name)}</b>${b.status==='booked'?'<span class="badge ok">Booked</span>':'<span class="badge warn">Not booked yet</span>'}</div><div class="small">${dLabel(b.date)}${b.time?' · '+esc(b.time):''}${b.price?' · '+esc(b.price):''}</div>${b.note?`<div class="small muted">${esc(b.note)}</div>`:''}</div>`).join('')}</div>`;}
+  if(infoView==='check'){h+=`<div class="card"><h2>⚠️ Needs checking</h2><div class="small muted">These came from my notes, not a confirmed source. Look each one up (or tap Directions to see where Google puts it), then mark it checked.</div></div>`;
+    h+=unv.length?`<div class="card list">${unv.map((u,k)=>`<div><b>${esc(u.label)}</b><div class="small muted">${esc(u.sub)}</div><div class="row" style="margin-top:6px"><a class="btn sm" href="${u.url}" target="_blank" rel="noopener">🔎 Look up</a><button class="btn sm" onclick="markChecked(${k})">✅ Mark checked</button></div></div>`).join('')}</div>`:'<div class="card okc">Everything is verified. 🎉</div>';}
+  if(infoView==='dates'){const t=today();h+=`<div class="card list">${(trip.deadlines||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map((x,k)=>{const i=trip.deadlines.indexOf(x);return `<div class="${x.done?'muted':''}"><div class="check" style="margin:0"><input type="checkbox" ${x.done?'checked':''} onchange="trip.deadlines[${i}].done=this.checked;saveTrip();render()"><div style="flex:1"><div class="between"><b style="${x.done?'text-decoration:line-through':''}">${esc(x.title)}</b><span class="small ${!x.done&&x.date<t?'warnc':'muted'}">${dLabel(x.date)}</span></div>${x.note?`<div class="small muted">${esc(x.note)}</div>`:''}</div></div></div>`}).join('')}</div>`;}
+  if(infoView==='taxi'){h+=`<div class="card small muted">Tap a card to show it full screen to a taxi driver or hotel staff.</div>`+(trip.taxiCards||[]).map((c,i)=>`<div class="card" onclick="showTaxi(${i})"><div class="between"><b>${esc(c.name)}</b>${vBadge(c.verified)}</div><div style="font-size:18px;margin-top:6px">${esc(c.ja||c.en)}</div>${c.ja?`<div class="small muted">${esc(c.en)}</div>`:''}</div>`).join('');}
+  if(infoView==='help'){const e=trip.emergency||{};
+    h+=`<div class="card"><h2>🚨 Emergency</h2><div class="list">${(e.numbers||[]).map(n=>`<div class="between"><div><b>${esc(n.name)}</b>${n.note?`<div class="small muted">${esc(n.note)}</div>`:''}</div><a class="btn sm" href="tel:${esc(n.tel)}">📞 ${esc(n.tel)}</a></div>`).join('')}</div>${e.insurance?`<div class="small" style="margin-top:8px">Travel insurance: ${esc(e.insurance)}</div>`:''}</div>`;
+    h+=`<div class="card"><h2>🗣️ Phrases</h2><div class="small muted">Tap 🔊 to have your phone say it.</div><div class="list">${(trip.phrases||[]).map((p,i)=>`<div class="between"><div><b>${esc(p.en)}</b><div>${esc(p.ja)}</div><div class="small muted">${esc(p.romaji||'')}</div></div><button class="btn sm" onclick="say(${i})">🔊</button></div>`).join('')}</div></div>`;
+    h+=clockCard();}
+  if(infoView==='data'){h+=`<div class="card"><h2>📂 Your trip file</h2><p class="small muted">Everything lives only on this phone. Export to back it up or to send me a copy to update. Import a new file to replace the trip (your spending log stays).</p>
+    <div class="row"><button class="btn pri" onclick="pickFile()">Import trip file</button><button class="btn" onclick="exportTrip()">Export / back up</button></div>
+    <div class="small muted" style="margin-top:8px">Trip file version: ${esc(trip.version||'?')} · ${spend.length} purchases logged</div></div>
+    <div class="card"><h2>Reset</h2><p class="small muted">Clears the trip and spending log from this phone.</p><button class="btn" style="color:var(--accent)" onclick="resetAll()">Erase everything</button></div>`;}
+  $('#main').innerHTML=h;if(infoView==='help')tickClocks();}
+function unverified(){const out=[],seen=new Map();
+  trip.days.forEach((d,di)=>d.stops.forEach((s,si)=>{if(!isOk(s.verified)||s.pinApprox){const key=(s.name+'|'+(s.address||'')).toLowerCase();
+    if(seen.has(key)){const u=seen.get(key);u.refs.push({t:'stop',di,si});u.n++;u.sub=u.base+` · ${u.n} days`;return}
+    const base=`${s.address||'no address yet'}${s.pinApprox&&isOk(s.verified)?' · address OK, map pin approximate':''}`;
+    const u={label:s.name,base,sub:`${dLabel(d.date)} · ${base}`,n:1,url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([s.name,s.address].filter(Boolean).join(', ')),refs:[{t:'stop',di,si}]};
+    seen.set(key,u);out.push(u)}}));
+  (trip.stays||[]).forEach((s,i)=>{if(!isOk(s.verified))out.unshift({label:'🛏️ '+s.name,sub:'Stay · '+s.address+(s.note?' · '+s.note:''),url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(s.name+', '+s.address),refs:[{t:'stay',i}]})});
+  (trip.taxiCards||[]).forEach((c,i)=>{if(!isOk(c.verified))out.unshift({label:'🚕 Taxi card: '+c.name,sub:c.checkNote||c.en,url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(c.en),refs:[{t:'taxi',i}]})});
+  return out}
+function markChecked(k){const u=unverified()[k];if(!u)return;const v={ok:true,src:'You',date:today()};
+  u.refs.forEach(r=>{if(r.t==='stop'){const s=trip.days[r.di].stops[r.si];s.verified=v;s.pinApprox=false}else if(r.t==='stay')trip.stays[r.i].verified=v;else trip.taxiCards[r.i].verified=v});
+  saveTrip();render();toast('Marked checked')}
+function showTaxi(i){const c=trip.taxiCards[i];openSheet(`<div style="padding:10px 4px"><div class="muted small">${esc(c.name)}</div><div class="jp" style="margin:10px 0">${esc(c.ja||c.en)}</div>${c.ja?`<div class="muted">${esc(c.en)}</div>`:''}<div class="hr"></div><div style="font-size:22px;font-weight:700">${esc(trip.taxiLine||'この住所までお願いします。')}</div><div class="muted small">“Please take me to this address.”</div>${c.tel?`<div style="margin-top:10px">📞 ${esc(c.tel)}</div>`:''}<button class="btn" style="margin-top:14px" onclick="closeSheet()">Close</button></div>`)}
+function say(i){const p=trip.phrases[i];if(!('speechSynthesis' in window)){toast('Speech not supported');return}const u=new SpeechSynthesisUtterance(p.ja);u.lang='ja-JP';u.rate=.9;speechSynthesis.cancel();speechSynthesis.speak(u)}
+
+/* ---------- sheet / import / export ---------- */
+function openSheet(h){$('#sheet').innerHTML=h;$('#modal').classList.remove('hidden')}
+function closeSheet(){$('#modal').classList.add('hidden')}
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeSheet()});
+function pickFile(){$('#fileIn').value='';$('#fileIn').click()}
+$('#fileIn').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;
+  try{const j=JSON.parse(await f.text());if(!Array.isArray(j.days)||!j.days.length)throw new Error('This file has no days in it.');
+    const sp=j._spending;delete j._spending;
+    if(trip&&!confirm(`Replace your current trip with “${j.name||'this file'}”${j.version?' (v'+j.version+')':''}? Your spending log stays.`))return;
+    trip=j;saveTrip();
+    if(Array.isArray(sp)&&sp.length&&(!spend.length||confirm(`This file also has ${sp.length} logged purchases. Restore them (replaces this phone's log)?`))){spend=sp;saveSpend()}
+    selDay=null;render();toast('Trip loaded ✓')}catch(err){alert('Could not read that file: '+err.message)}});
+async function exportTrip(){const data=JSON.stringify(Object.assign({},trip,{_spending:spend,exported:new Date().toISOString()}),null,2);
+  const name=`japan-trip-${today()}.json`,file=new File([data],name,{type:'application/json'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
+function resetAll(){if(!confirm('Erase the trip and spending log from this phone? Export first if you want a backup.'))return;['jt_trip','jt_spend'].forEach(k=>localStorage.removeItem(k));trip=null;spend=[];render()}
+
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+render();
+</script>
+</body>
+</html>

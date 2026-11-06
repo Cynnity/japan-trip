@@ -1,0 +1,3 @@
+# private trip data never goes in the repo
+*trip-data*.json
+japan-trip-*.json
