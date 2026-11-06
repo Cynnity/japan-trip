@@ -118,6 +118,11 @@ const legMins=l=>l&&l.steps?l.steps.reduce((a,s)=>a+(+s.mins||0),0):0;
 const legFare=l=>l&&l.steps?l.steps.reduce((a,s)=>a+(+s.fare||0),0):0;
 const isOk=v=>v&&v.ok;
 const today=()=>nowIn(TZ).date;
+const dTZ=d=>d.tz||TZ;
+/* which trip day is 'now' (each day can run on its own time zone, e.g. a Florida travel day) */
+function curDay(){const D=trip.days;for(let i=0;i<D.length;i++){const n=nowIn(dTZ(D[i]));if(n.date!==D[i].date)continue;
+  const last=Math.max(0,...D[i].stops.map(s=>toMin(s.time)??0));const nx=D[i+1];
+  if(n.mins<=last+30||!nx||nowIn(dTZ(nx)).date!==nx.date)return i}return -1}
 const uid=()=>Math.random().toString(36).slice(2,9);
 function dirURL(s){const dest=(isOk(s.verified)&&s.lat&&!s.pinApprox)?`${s.lat},${s.lon}`:encodeURIComponent([s.name,s.address].filter(Boolean).join(', '));
   return `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=transit`}
@@ -138,8 +143,8 @@ function render(){
   clearInterval(clockTimer);
   if(!trip||!Array.isArray(trip.days)){$('#hTitle').textContent='Japan Trip';$('#hSub').textContent='No trip loaded yet';$('#main').innerHTML=welcome();return}
   $('#hTitle').textContent=trip.name||'My Trip';
-  const t=today(),s=trip.days[0].date,e=trip.days[trip.days.length-1].date,i=trip.days.findIndex(d=>d.date===t);
-  $('#hSub').textContent=t<s?`${dayDiff(t,s)} days to go`:t>e?'Trip complete':`Day ${i+1} of ${trip.days.length} · ${trip.days[i].city||''}`;
+  const t=nowIn(dTZ(trip.days[0])).date,s=trip.days[0].date,e=trip.days[trip.days.length-1].date,i=curDay();
+  $('#hSub').textContent=i>=0?`Day ${i+1} of ${trip.days.length} · ${trip.days[i].city||''}`:t<s?`${dayDiff(t,s)} days to go`:'Trip complete';
   if(selDay==null){selDay=i>=0?i:0}
   ({today:rToday,days:rDays,map:rMap,money:rMoney,info:rInfo}[tab]||rToday)();
 }
@@ -170,8 +175,8 @@ function dayCost(d){let y=0;d.stops.forEach(s=>{y+=+s.cost||0;y+=legFare(s.trans
 
 /* ---------- TODAY ---------- */
 function rToday(){
-  const n=nowIn(TZ),s=trip.days[0].date,e=trip.days[trip.days.length-1].date,i=trip.days.findIndex(d=>d.date===n.date);let h='';
-  if(n.date<s){
+  const n0=nowIn(dTZ(trip.days[0])),s=trip.days[0].date,i=curDay();let h='';
+  if(i<0&&n0.date<s){const n=n0;
     const left=dayDiff(n.date,s);
     h+=`<div class="card"><div class="muted">Countdown</div><div class="big">${left} day${left===1?'':'s'}</div><div class="muted">until ${esc(trip.arrivalLabel||('Day 1 · '+dLabel(s)))}</div></div>`;
     const up=(trip.deadlines||[]).filter(x=>!x.done&&x.date>=n.date).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,4);
@@ -181,10 +186,10 @@ function rToday(){
   }else if(i<0){
     h+=`<div class="card"><div class="big">おかえり! 🏠</div><p class="muted">Trip complete. Your spending log and haul are still in the Money tab.</p></div>`;
   }else{
-    const d=trip.days[i],st=d.stops;let cur=-1,nx=-1;
+    const d=trip.days[i],st=d.stops,n=nowIn(dTZ(d));let cur=-1,nx=-1;
     st.forEach((x,j)=>{const m=toMin(x.time);if(m!==null&&m<=n.mins)cur=j});
     nx=st.findIndex((x,j)=>j>cur&&toMin(x.time)!==null&&toMin(x.time)>n.mins);
-    h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}</div><h2 style="margin:2px 0 6px">${esc(d.title)}</h2>`;
+    h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}</div><h2 style="margin:2px 0 6px">${esc(d.title)}</h2>${d.tzNote?`<div class="small warnc">🕒 ${esc(d.tzNote)}</div>`:''}`;
     if(nx>=0){const nxt=st[nx],travel=cur>=0?legMins(st[cur].transitTo):0,leave=toMin(nxt.time)-travel,until=leave-n.mins;
       h+=`<div class="hr"></div><div class="muted small">Next up</div><div style="font-size:20px;font-weight:700">${esc(nxt.name)}</div>
       <div>${t12(nxt.time)}${travel?` · <b class="${until<=15?'warnc':''}">leave by ${t12(minTo(leave))}</b>`:''}</div>
@@ -221,7 +226,7 @@ async function loadWx(){const c=$('#wxCard');if(!c)return;const la=c.dataset.lat
 function dayChips(all){return `<div class="chips">${all?`<button class="chip ${selDay===-1?'on':''}" onclick="selDay=-1;render()">All</button>`:''}${trip.days.map((d,i)=>`<button class="chip ${i===selDay?'on':''}" onclick="selDay=${i};render()">${dLabel(d.date,{weekday:undefined})}</button>`).join('')}</div>`}
 function rDays(){if(selDay<0)selDay=0;const d=trip.days[selDay],c=dayCost(d);
   let h=dayChips(false);
-  h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}${d.stay?' · 🛏️ '+esc(d.stay):''}</div><h2 style="margin:2px 0 4px">${esc(d.title)}</h2>
+  h+=`<div class="card"><div class="muted small">${dLabel(d.date,{weekday:'long'})} · ${esc(d.city||'')}${d.stay?' · 🛏️ '+esc(d.stay):''}</div><h2 style="margin:2px 0 4px">${esc(d.title)}</h2>${d.tzNote?`<div class="small warnc">🕒 ${esc(d.tzNote)}</div>`:''}
   <div class="row small muted">${d.walk?`<span>🚶 ${esc(d.walk)}</span>`:''}${c?`<span>💴 ~${yen(c)} (~${usd(toUSD(c,'JPY'))}) planned</span>`:''}</div>
   <div class="row" style="margin-top:10px"><button class="btn sm" onclick="editStop(${selDay},-1)">＋ Add stop</button><button class="btn sm" onclick="optimize(${selDay})">⚡ Optimize order</button></div></div>`;
   h+=`<div class="card">${d.stops.length?d.stops.map((s,i)=>stopHTML(s,i,d,{edit:1,d:selDay})).join(''):'<div class="muted">No stops yet.</div>'}</div>`;
