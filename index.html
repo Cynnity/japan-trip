@@ -57,7 +57,7 @@ nav button.on{color:var(--accent)}
 .bar{height:8px;background:var(--card2);border-radius:99px;overflow:hidden;margin:6px 0 2px}.bar>i{display:block;height:100%;background:var(--ok)}
 .bar.over>i{background:var(--accent)}
 table{width:100%;border-collapse:collapse;font-size:14px}td{padding:7px 0;border-bottom:1px solid var(--line);vertical-align:top}td:last-child{text-align:right}
-#map{height:calc(100vh - 230px);min-height:320px;border-radius:16px;z-index:1}
+#map{height:56vh;min-height:300px;border-radius:16px;z-index:1}
 .leaflet-container{background:#1b2036}
 .pin{background:var(--accent);color:#fff;border:2px solid #fff;border-radius:50%;width:26px!important;height:26px!important;display:flex;align-items:center;justify-content:center;font:700 12px/1 sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.5)}
 .pin.unv{background:var(--warn);color:#222}
@@ -77,6 +77,14 @@ textarea{min-height:80px}
 .ask{z-index:2500;align-items:center}
 .badge.wand{color:var(--accent2)}.badge.opt{color:var(--ok);border:1px solid var(--ok);background:none}
 .stop.wander::before{background:var(--bg);border-style:dashed;border-color:var(--accent2)}.stop.wander h3{color:var(--accent2)}
+.maplegend{display:flex;flex-wrap:wrap;gap:6px 14px}.maplegend span{display:inline-flex;align-items:center;gap:6px}
+.maplegend i,.rseg i{display:inline-block;width:22px;height:5px;border-radius:3px;flex:none}.maplegend i.dash,.rseg i.dash{height:0;border-top:3px dashed;background:none}.maplegend i.dot{border-top-style:dotted}
+.pin.mini{position:static;display:inline-flex!important;width:22px!important;height:22px!important;border-radius:50%;align-items:center;justify-content:center;font-size:11px;flex:none}
+.stn{display:inline-block;width:10px;height:10px;border-radius:50%;background:#00b2e5;border:2px solid #fff}
+.routelist{display:flex;flex-direction:column;gap:2px}.rstop{display:flex;gap:10px;align-items:flex-start;padding:6px 0;cursor:pointer}
+.rleg{margin:0 0 4px 10px;padding:2px 0 6px 20px;border-left:2px dashed var(--line);display:flex;flex-direction:column;gap:3px}.rseg{display:flex;align-items:center;gap:8px;font-size:13px}
+.seglabel span{display:inline-block;transform:translate(-50%,-50%);white-space:nowrap;background:rgba(15,18,32,.88);color:#fff;border:1.5px solid;border-radius:99px;padding:1px 6px;font:700 11px/1.4 -apple-system,system-ui,sans-serif}
+.pin.skip{opacity:.4}
 .tipchip{background:none;border:1px dashed var(--accent2);color:var(--accent2);border-radius:99px;padding:4px 9px;font:600 12px/1.2 inherit;cursor:pointer}
 .upd{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:1500;display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--accent);border-radius:14px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
 .seg{display:flex;gap:6px;margin:8px 0 4px}.seg button{flex:1;background:var(--bg);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:7px 6px;font:600 13px/1.1 inherit}.seg button.on{background:var(--accent2);border-color:var(--accent2);color:#0f1220}
@@ -98,7 +106,7 @@ textarea{min-height:80px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION="1.6";
+const APP_VERSION="1.7";
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -331,17 +339,54 @@ const tipById=id=>(trip&&trip.tips||[]).find(t=>t.id===id);
 function openTip(id){const t=tipById(id);if(!t)return;openSheet(`<h2>${esc(t.icon||'💡')} ${esc(t.title)}</h2><div style="white-space:pre-line;line-height:1.55">${esc(t.body)}</div><button class="btn" style="margin-top:14px" onclick="closeSheet()">Got it</button>`)}
 
 /* ---------- MAP ---------- */
-function rMap(){$('#main').innerHTML=dayChips(true)+`<div id="map"></div><div class="row" style="margin-top:10px"><button class="btn sm" onclick="locate()">📍 Where am I</button><span class="small muted">Lines connect stops in order. Orange pins = still need checking.</span></div>`;
-  if(!window.L){$('#map').innerHTML='<div class="card muted">Map needs a connection the first time it loads.</div>';return}
-  map=L.map('map',{zoomControl:false}).setView([35.68,139.76],11);
+const MODE={walk:{c:'#cfd3e6',dash:'2 7',w:4,i:'🚶',n:'Walk'},train:{c:'#5fd4e6',w:6,i:'🚆',n:'Train'},subway:{c:'#5fd4e6',w:6,i:'🚇',n:'Subway'},bus:{c:'#b07cff',dash:'10 6',w:5,i:'🚌',n:'Bus'},taxi:{c:'#ffb347',dash:'1 8',w:5,i:'🚗',n:'Car / taxi'},plane:{c:'#ffffff',dash:'6 10',w:2,i:'✈️',n:'Flight'},ferry:{c:'#4fb3ff',dash:'8 8',w:4,i:'⛴️',n:'Boat'},ropeway:{c:'#ff8ad8',dash:'4 4',w:4,i:'🚡',n:'Ropeway'}};
+const isJapanDay=d=>!d.tz||d.tz===TZ;
+function legSegments(s,b){const l=s.transitTo,c=legChoice(s,b),out=[];if(!b||s.lat==null||b.lat==null)return out;
+  const A=[s.lat,s.lon],B=[b.lat,b.lon];
+  if(!l||!l.steps||!l.steps.length||(c.mode==='walk'&&!c.aw)){out.push({a:A,b:B,mode:l&&l.steps&&l.steps.length&&c.mode!=='walk'?'train':'walk',mins:c.mins,text:c.mode==='walk'?`Walk ~${c.w} min`:'Getting there',est:!l||!l.steps||!l.steps.length});return out}
+  let cur=A,pend=[];l.steps.forEach((st,k)=>{pend.push(st);const last=k===l.steps.length-1;const end=st.to?st.to:(last?B:null);if(!end)return;
+    const main=pend.find(x=>x.mode!=='walk')||pend[pend.length-1];const mins=pend.reduce((t,x)=>t+(+x.mins||0),0);
+    if(Math.abs(cur[0]-end[0])>1e-5||Math.abs(cur[1]-end[1])>1e-5)out.push({a:cur,b:end,mode:main.mode,color:main.color,line:main.line,mins,text:pend.map(x=>x.text).join(' → ')});
+    cur=end;pend=[]});
+  if(Math.abs(cur[0]-B[0])>1e-5||Math.abs(cur[1]-B[1])>1e-5)out.push({a:cur,b:B,mode:'walk',mins:0,text:'Walk to the stop'});
+  return out}
+let mapLegendOpen=LS.get('jt_legend',true);
+function rMap(){const D=trip.days,all=selDay===-1;
+  if(!all&&!D[selDay])selDay=0;const d=all?null:D[selDay];
+  let h=dayChips(true)+`<div id="map"></div>`;
+  h+=`<div class="row" style="margin-top:10px"><button class="btn sm" onclick="locate()">📍 Where am I</button><button class="btn sm" onclick="mapLegendOpen=!mapLegendOpen;LS.set('jt_legend',mapLegendOpen);render()">${mapLegendOpen?'Hide':'Show'} key</button></div>`;
+  if(mapLegendOpen)h+=`<div class="card small" style="margin-top:10px"><div class="maplegend">
+    <span><i style="background:#00b2e5"></i>Train / subway (line color)</span><span><i class="dash" style="border-color:#cfd3e6"></i>Walk</span>
+    <span><i class="dash dot" style="border-color:#ffb347"></i>Car / taxi</span><span><i class="dash" style="border-color:#b07cff"></i>Bus</span>
+    <span><i class="dash" style="border-color:#fff"></i>Flight</span><span><b class="pin mini">1</b>Stop (order)</span><span><b class="pin mini unv">2</b>Pin needs checking</span><span><b class="stn"></b>Station / transfer</span></div>
+    <div class="muted" style="margin-top:6px">Lines go stop → station → transfer → station → stop. They show the order of your route, not the exact track. Tap a line for the step, or tap a stop below to fly to it.</div></div>`;
+  if(d){h+=`<div class="card"><h2>Route · ${dLabel(d.date)}</h2><div class="routelist">`;
+    d.stops.forEach((s,i)=>{const b=d.stops[i+1];const segs=legSegments(s,b);const c=b?legChoice(s,b):null;
+      h+=`<div class="rstop" onclick="flyStop(${i})"><span class="pin mini ${isOk(s.verified)&&!s.pinApprox?'':'unv'}">${i+1}</span><div style="min-width:0"><div class="time">${esc(t12(s.time))}</div><b>${esc(s.name)}</b></div></div>`;
+      if(b&&segs.length){h+=`<div class="rleg">${segs.filter(g=>g.mins||segs.length===1).map(g=>{const m=MODE[g.mode]||MODE.train;return `<div class="rseg"><i style="background:${g.mode==='walk'||g.mode==='taxi'||g.mode==='plane'?'none':(g.color||m.c)};border-color:${g.color||m.c}" class="${g.mode==='walk'||g.mode==='taxi'||g.mode==='plane'?'dash':''}"></i><span>${m.i} ${esc(g.line||m.n)}${g.mins?` · ${g.mins} min`:''}${g.est?' (est.)':''}</span></div>`}).join('')}
+        <div class="small muted">${c&&c.mins?`Total ~${c.mins} min`:''}${c&&c.mode!=='walk'&&legFare(s.transitTo)?` · ~${yen(legFare(s.transitTo))}`:''}</div></div>`}});
+    h+=`</div></div>`}
+  $('#main').innerHTML=h;
+  if(!window.L){$('#map').innerHTML='<div class="card muted">The map needs a connection the first time it loads.</div>';return}
+  map=L.map('map',{zoomControl:false,tap:true}).setView([35.68,139.76],11);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-  const days=selDay===-1?trip.days.map((d,i)=>i):[selDay],pts=[];const colors=['#ff4d6d','#5fd4e6','#ffb347','#3ddc97','#c084fc'];
-  days.forEach((di,k)=>{const d=trip.days[di],ll=[];let n=0;
-    d.stops.forEach((s,i)=>{if(s.lat==null)return;n++;const p=[s.lat,s.lon];ll.push(p);pts.push(p);
-      const m=L.marker(p,{icon:L.divIcon({className:'pin'+(isOk(s.verified)&&!s.pinApprox?'':' unv'),html:selDay===-1?String(di+1):String(n),iconSize:[26,26]})}).addTo(map);
-      m.bindPopup(`<b>${esc(s.name)}</b><br>${esc(t12(s.time))}${selDay===-1?' · '+dLabel(d.date):''}<br><a href="${dirURL(s)}" target="_blank" rel="noopener">Directions →</a>`)});
-    if(ll.length>1)L.polyline(ll,{color:colors[k%colors.length],weight:3,opacity:.8,dashArray:selDay===-1?'4 6':null}).addTo(map)});
-  if(pts.length)map.fitBounds(pts,{padding:[40,40],maxZoom:15});setTimeout(()=>map&&map.invalidateSize(),80)}
+  const pts=[];const colors=['#ff4d6d','#5fd4e6','#ffb347','#3ddc97','#c084fc'];window._stopMarkers=[];
+  const days=all?D.map((x,i)=>i).filter(i=>isJapanDay(D[i])):[selDay];
+  days.forEach((di,k)=>{const dd=D[di];let n=0;
+    if(all){const ll=dd.stops.filter(s=>s.lat!=null).map(s=>[s.lat,s.lon]);if(ll.length>1)L.polyline(ll,{color:colors[k%colors.length],weight:3,opacity:.75,dashArray:'4 6'}).addTo(map)}
+    else dd.stops.forEach((s,i)=>{legSegments(s,dd.stops[i+1]).forEach(g=>{const m=MODE[g.mode]||MODE.train;const col=g.color||m.c;
+      const line=L.polyline([g.a,g.b],{color:col,weight:m.w,opacity:.95,dashArray:m.dash||null,lineCap:'round'}).addTo(map);
+      if(!m.dash)L.polyline([g.a,g.b],{color:'#0f1220',weight:m.w+4,opacity:.55}).addTo(map).bringToBack();
+      line.bindPopup(`<b>${m.i} ${esc(g.line||m.n)}</b>${g.mins?` · ${g.mins} min`:''}<br><span style="font-size:12px">${esc(g.text||'')}</span>`);
+      if(g.mode!=='plane'&&(g.mode!=='walk'||g.mins>=10)&&g.mins>=4&&(dist({lat:g.a[0],lon:g.a[1]},{lat:g.b[0],lon:g.b[1]})||0)>0.35){const mid=[(g.a[0]+g.b[0])/2,(g.a[1]+g.b[1])/2];L.marker(mid,{interactive:false,icon:L.divIcon({className:'seglabel',html:`<span style="border-color:${col}">${m.i} ${g.mins}m</span>`,iconSize:null})}).addTo(map)}
+      if(g.mode!=='walk'&&g.b){L.circleMarker(g.b,{radius:5,color:'#fff',weight:2,fillColor:col,fillOpacity:1}).addTo(map)}
+      pts.push(g.a,g.b)})});
+    dd.stops.forEach((s,i)=>{if(s.lat==null)return;n++;const p=[s.lat,s.lon];pts.push(p);
+      const m=L.marker(p,{zIndexOffset:500,icon:L.divIcon({className:'pin'+(isOk(s.verified)&&!s.pinApprox?'':' unv')+(s.skipped?' skip':''),html:all?String(di+1):String(i+1),iconSize:[26,26]})}).addTo(map);
+      m.bindPopup(`<b>${esc(s.name)}</b><br>${esc(t12(s.time))}${all?' · '+dLabel(dd.date):''}<br><a href="${dirURL(s)}" target="_blank" rel="noopener">Directions →</a>`);
+      if(!all)window._stopMarkers[i]=m})});
+  if(pts.length)map.fitBounds(pts,{padding:[30,30],maxZoom:15});setTimeout(()=>map&&map.invalidateSize(),80)}
+function flyStop(i){const m=window._stopMarkers&&window._stopMarkers[i];if(!m||!map)return;map.flyTo(m.getLatLng(),16,{duration:.6});m.openPopup();window.scrollTo({top:0,behavior:'smooth'})}
 function locate(){if(!navigator.geolocation){toast('Location not available');return}
   watchId=navigator.geolocation.watchPosition(p=>{const ll=[p.coords.latitude,p.coords.longitude];if(!map)return;
     if(!meMarker){meMarker=L.marker(ll,{icon:L.divIcon({className:'me',iconSize:[18,18]})}).addTo(map);map.setView(ll,15)}else meMarker.setLatLng(ll)},
