@@ -75,6 +75,8 @@ textarea{min-height:80px}
 .wx .t{font-size:28px;font-weight:800}
 .list>div{padding:8px 0;border-bottom:1px solid var(--line)}.list>div:last-child{border:0}
 .ask{z-index:2500;align-items:center}
+.badge.wand{color:var(--accent2)}.badge.opt{color:var(--ok);border:1px solid var(--ok);background:none}
+.stop.wander::before{background:var(--bg);border-style:dashed;border-color:var(--accent2)}.stop.wander h3{color:var(--accent2)}
 .tipchip{background:none;border:1px dashed var(--accent2);color:var(--accent2);border-radius:99px;padding:4px 9px;font:600 12px/1.2 inherit;cursor:pointer}
 .upd{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:1500;display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--accent);border-radius:14px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
 .seg{display:flex;gap:6px;margin:8px 0 4px}.seg button{flex:1;background:var(--bg);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:7px 6px;font:600 13px/1.1 inherit}.seg button.on{background:var(--accent2);border-color:var(--accent2);color:#0f1220}
@@ -96,7 +98,7 @@ textarea{min-height:80px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION="1.5";
+const APP_VERSION="1.6";
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -184,8 +186,8 @@ function legHTML(s,b,di,si){const l=s&&s.transitTo,c=legChoice(s,b);
   ${b?`<div style="margin-top:6px"><a class="small" href="${legURL(s,b,walking||c.aw?'walk':'transit')}" target="_blank" rel="noopener">Live directions in Google Maps →</a></div>`:''}</div>`}
 function setLeg(di,si,m){const s=trip.days[di].stops[si];if(!s.transitTo)return;s.transitTo.pick=m;saveTrip();render()}
 function stopHTML(s,i,day,o){o=o||{};
-  return `<div class="stop ${o.cls||''}${s.skipped?' done':''}">${s.skipped?'<div class="small warnc">⏭️ Skipped</div>':''}<div class="between"><span class="time">${esc(t12(s.time))}${s.end?' – '+esc(t12(s.end)):''}</span>
-  <span>${s.locked?'<span class="badge lock">🔒 Booked</span> ':''}${vBadge(s.verified)}</span></div>
+  return `<div class="stop ${o.cls||''}${s.skipped?' done':''}${s.kind==='wander'?' wander':''}">${s.skipped?'<div class="small warnc">⏭️ Skipped</div>':''}<div class="between"><span class="time">${esc(t12(s.time))}${s.end?' – '+esc(t12(s.end)):''}</span>
+  <span>${s.locked?'<span class="badge lock">🔒 Booked</span> ':''}${s.fixed?'<span class="badge lock">📌 Set time</span> ':''}${s.kind==='wander'?'<span class="badge wand">🚶 Wander</span> ':''}${s.optional?'<span class="badge opt">Optional</span> ':''}${s.kind==='wander'?'':vBadge(s.verified)}</span></div>
   <h3>${esc(s.name)}</h3>
   ${s.address?`<div class="muted small">📍 ${esc(s.address)}${s.pinApprox?' <span class="warnc">(map pin approximate)</span>':''}</div>`:''}
   ${s.hours?`<div class="muted small">🕘 ${esc(s.hours)}</div>`:''}
@@ -288,7 +290,7 @@ function saveStop(di,si){const d=trip.days[di],old=si>=0?d.stops[si]:{};const v=
   saveTrip();closeSheet();render();toast('Saved')}
 function moveStop(di,si,dir){const st=trip.days[di].stops,j=si+dir;if(j<0||j>=st.length)return;[st[si],st[j]]=[st[j],st[si]];const t=st[si].time;st[si].time=st[j].time;st[j].time=t;saveTrip();closeSheet();render()}
 async function delStop(di,si){if(!await ask('Delete this stop?','Delete'))return;trip.days[di].stops.splice(si,1);saveTrip();closeSheet();render()}
-const isAnchor=(s,i,st)=>s.locked||i===0||i===st.length-1||/^Home/.test(s.name||'');
+const isAnchor=(s,i,st)=>s.locked||s.fixed||i===0||i===st.length-1||/^Home/.test(s.name||'');
 async function optimize(di){const d=trip.days[di],msgs=[];let st=d.stops;
   if(st.length>=3){const times=st.map(s=>s.time),ends=st.map(s=>s.end),nextOf=new Map(st.map((s,i)=>[s,st[i+1]]));const out=[];let seg=[],anchor=null;
     const nn=(from,arr)=>{const res=[],pool=arr.slice();let c=from;while(pool.length){let bi=0,bd=Infinity;pool.forEach((p,j)=>{const x=c?dist(c,p):0;const dd=x==null?1e6:x;if(dd<bd){bd=dd;bi=j}});c=pool.splice(bi,1)[0];res.push(c)}return res};
@@ -304,7 +306,7 @@ async function optimize(di){const d=trip.days[di],msgs=[];let st=d.stops;
 async function checkTiming(di,pre){pre=pre||'';const st=trip.days[di].stops,shift=[],bad=[];let prevEnd=null;
   for(let i=0;i<st.length;i++){const s=st[i],t=toMin(s.time);if(t==null||s.skipped)continue;let start=t;
     if(i>0&&prevEnd!=null){const arr=prevEnd+(legChoice(st[i-1],s).mins||0);
-      if(arr>t+2){if(s.locked)bad.push(`🔒 ${s.name}: you'd get there ~${t12(minTo(arr))}, but it's booked for ${t12(s.time)}.`);else{start=Math.ceil(arr/5)*5;shift.push({i,start,by:start-t})}}}
+      if(arr>t+2){if(s.locked||s.fixed)bad.push(`${s.locked?'🔒':'📌'} ${s.name}: you'd get there ~${t12(minTo(arr))}, but it's booked for ${t12(s.time)}.`);else{start=Math.ceil(arr/5)*5;shift.push({i,start,by:start-t})}}}
     const dur=(s.end&&toMin(s.end)!=null)?Math.max(0,toMin(s.end)-t):0;prevEnd=start+dur}
   if(!shift.length&&!bad.length){toast(pre+'Timing works ✓');return}
   const lines=[...bad,...shift.map(x=>`${st[x.i].name}: ${t12(st[x.i].time)} → ${t12(minTo(x.start))} (+${x.by} min)`)];
