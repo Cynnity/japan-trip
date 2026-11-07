@@ -107,7 +107,7 @@ textarea{min-height:80px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION="1.8";
+const APP_VERSION="1.9";
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -362,6 +362,39 @@ async function resetPack(id){if(!await ask('Uncheck everything on this list?','R
 function packDue(date){return (trip.packLists||[]).filter(l=>l.showFrom&&l.showUntil&&date>=l.showFrom&&date<=l.showUntil)}
 function packCard(date){return packDue(date).map(l=>{const pr=packProg(l);return `<div class="card" onclick="tab='info';infoView='pack';openPack='${esc(l.id)}';LS.set('jt_tab','info');render()" style="cursor:pointer"><div class="between"><b>🧳 Packing: ${esc(l.title)}</b><span class="small ${pr.done===pr.total?'okc':'warnc'}">${pr.done}/${pr.total}</span></div><div class="bar ${pr.done===pr.total?'':'over'}"><i style="width:${pr.total?pr.done/pr.total*100:0}%"></i></div><div class="small muted">Tap to open the checklist</div></div>`}).join('')}
 
+/* ---------- saved spots ---------- */
+let spotLoc=null,spotMap=null;
+const fmtKm=km=>km<1?Math.round(km*1000)+' m':(km<10?km.toFixed(1):Math.round(km))+' km';
+function spotLocate(cb){if(!navigator.geolocation){toast('Location not available');return}
+  navigator.geolocation.getCurrentPosition(p=>{spotLoc={lat:p.coords.latitude,lon:p.coords.longitude};if(cb)cb();else render()},
+    ()=>toast('Allow location access to see distances'),{enableHighAccuracy:true,maximumAge:60000,timeout:15000})}
+function spotDirURL(x){const dest=x.lat!=null?`${x.lat},${x.lon}`:encodeURIComponent([x.name,x.address].filter(Boolean).join(', '));
+  return `https://www.google.com/maps/dir/?api=1${spotLoc?`&origin=${spotLoc.lat},${spotLoc.lon}`:''}&destination=${dest}&travelmode=transit`}
+function closeSpot(){if(spotMap){spotMap.remove();spotMap=null}const m=document.getElementById('spotModal');if(m)m.remove()}
+function spotDistText(x){if(!spotLoc)return 'Finding you…';const km=dist(spotLoc,x);if(km==null)return '';
+  return `📍 ${fmtKm(km)} from you`+(km<=3?` · ~${walkMin(spotLoc,x)} min walk`:km>100?' · that\'s in another city':km>40?' · a day trip from here':' · take the train')}
+function openSpot(i){const x=(trip.spots||[])[i];if(!x)return;closeSpot();
+  const m=document.createElement('div');m.className='modal';m.id='spotModal';m.onclick=e=>{if(e.target===m)closeSpot()};
+  m.innerHTML=`<div class="sheet"><div class="between"><h2 style="margin:0">${esc(x.icon||'📍')} ${esc(x.name)}</h2><button class="btn sm ghost" onclick="closeSpot()">✕</button></div>
+    <div class="small muted" style="margin:4px 0 8px">${esc([x.when,x.hours].filter(Boolean).join(' · '))}</div>
+    <div id="spotmap" style="height:260px;border-radius:12px;overflow:hidden;background:var(--card2)"></div>
+    <div id="spotDist" class="small" style="margin:8px 0">${esc(spotDistText(x))}</div>
+    ${x.note?`<div class="small" style="white-space:pre-line;margin-bottom:8px">${esc(x.note)}</div>`:''}
+    ${x.address?`<div class="small muted" style="margin-bottom:10px">${esc(x.address)}</div>`:''}
+    <div class="row"><a class="btn pri" id="spotDir" href="${spotDirURL(x)}" target="_blank" rel="noopener" style="flex:1;justify-content:center">🧭 Directions</a>
+    <a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([x.name,x.address].filter(Boolean).join(', '))}" target="_blank" rel="noopener">Google Maps</a></div></div>`;
+  document.body.appendChild(m);
+  const draw=()=>{if(!window.L||x.lat==null){const el=$('#spotmap');if(el)el.innerHTML='<div class="muted small" style="padding:12px">Map needs a connection. Directions still work.</div>';return}
+    if(!spotMap){spotMap=L.map('spotmap',{zoomControl:false,attributionControl:false}).setView([x.lat,x.lon],15);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(spotMap);
+      L.marker([x.lat,x.lon],{icon:L.divIcon({className:'pin',html:'★',iconSize:[26,26]})}).addTo(spotMap)}
+    if(spotLoc){L.marker([spotLoc.lat,spotLoc.lon],{icon:L.divIcon({className:'me',iconSize:[18,18]})}).addTo(spotMap);
+      const km=dist(spotLoc,x);if(km!=null&&km<60){spotMap.fitBounds([[x.lat,x.lon],[spotLoc.lat,spotLoc.lon]],{padding:[30,30],maxZoom:16});
+        L.polyline([[x.lat,x.lon],[spotLoc.lat,spotLoc.lon]],{color:'#cfd3e6',weight:3,dashArray:'2 7'}).addTo(spotMap)}}
+    setTimeout(()=>spotMap&&spotMap.invalidateSize(),60)};
+  setTimeout(draw,30);
+  spotLocate(()=>{const d=$('#spotDist');if(d)d.textContent=spotDistText(x);const a=$('#spotDir');if(a)a.href=spotDirURL(x);if(spotMap)draw()})}
+
 /* ---------- MAP ---------- */
 const MODE={walk:{c:'#cfd3e6',dash:'2 7',w:4,i:'🚶',n:'Walk'},train:{c:'#5fd4e6',w:6,i:'🚆',n:'Train'},subway:{c:'#5fd4e6',w:6,i:'🚇',n:'Subway'},bus:{c:'#b07cff',dash:'10 6',w:5,i:'🚌',n:'Bus'},taxi:{c:'#ffb347',dash:'1 8',w:5,i:'🚗',n:'Car / taxi'},plane:{c:'#ffffff',dash:'6 10',w:2,i:'✈️',n:'Flight'},ferry:{c:'#4fb3ff',dash:'8 8',w:4,i:'⛴️',n:'Boat'},ropeway:{c:'#ff8ad8',dash:'4 4',w:4,i:'🚡',n:'Ropeway'}};
 const isJapanDay=d=>!d.tz||d.tz===TZ;
@@ -458,8 +491,17 @@ async function delSpend(id){if(!await ask('Delete this entry?','Delete'))return;
 
 /* ---------- INFO ---------- */
 let infoView='bookings';
-function rInfo(){const views={pack:'🧳 Packing',tips:'💡 How Japan works',bookings:'Bookings',check:'Needs checking',dates:'Deadlines',taxi:'Taxi cards',help:'Emergency & phrases',data:'Data'};
+function rInfo(){const views={spots:'📍 Saved spots',pack:'🧳 Packing',tips:'💡 How Japan works',bookings:'Bookings',check:'Needs checking',dates:'Deadlines',taxi:'Taxi cards',help:'Emergency & phrases',data:'Data'};
   const unv=unverified();let h=`<div class="chips">${Object.entries(views).map(([k,v])=>`<button class="chip ${infoView===k?'on':''}" onclick="infoView='${k}';render()">${v}${k==='check'&&unv.length?` (${unv.length})`:''}</button>`).join('')}</div>`;
+  if(infoView==='spots'){const S=trip.spots||[];
+    if(!S.length)h+='<div class="card muted">No saved spots in this trip file yet.</div>';
+    else{const cats=[...new Set(S.map(x=>x.cat||'Other'))];
+      h+=`<div class="card small muted">Extra places picked for you. Tap one to see it on a map next to where you are, then hit Directions.</div>
+      <button class="btn ${spotLoc?'':'pri'}" style="width:100%;justify-content:center;margin-bottom:12px" onclick="spotLocate()">📍 ${spotLoc?'Update my location':'Show distances from me'}</button>`;
+      cats.forEach(c=>{let its=S.map((x,i)=>({x,i})).filter(o=>(o.x.cat||'Other')===c);
+        if(spotLoc)its.sort((a,b)=>(dist(spotLoc,a.x)??1e9)-(dist(spotLoc,b.x)??1e9));
+        h+=`<div class="card"><h3 style="margin-bottom:6px">${esc(c)}</h3>${its.map(({x,i})=>{const km=spotLoc?dist(spotLoc,x):null;
+          return `<div class="rstop" onclick="openSpot(${i})"><span class="pin mini">${esc(x.icon||'📍')}</span><div style="min-width:0;flex:1"><div class="between"><b>${esc(x.name)}</b>${km!=null?`<span class="small muted" style="flex:none">${fmtKm(km)}</span>`:''}</div><div class="small muted">${esc([x.when,x.hours].filter(Boolean).join(' · '))}</div></div></div>`}).join('')}</div>`})}}
   if(infoView==='pack'){const P=trip.packLists||[];
     if(openPack&&P.find(x=>x.id===openPack))h+=packHTML(P.find(x=>x.id===openPack));
     else h+=P.length?`<div class="card small muted">Check things off as they go in the bag. Your checks are saved on this phone. Reset a list to reuse it.</div>`+P.map(l=>{const pr=packProg(l);return `<div class="card" onclick="openPack='${esc(l.id)}';render()" style="cursor:pointer"><div class="between"><b>${esc(l.icon||'🧳')} ${esc(l.title)}</b><span class="small ${pr.done===pr.total?'okc':'muted'}">${pr.done}/${pr.total}</span></div>${l.when?`<div class="small muted">${esc(l.when)}</div>`:''}<div class="bar"><i style="width:${pr.total?pr.done/pr.total*100:0}%"></i></div></div>`}).join(''):'<div class="card muted">No packing lists in this trip file yet.</div>';}
