@@ -107,14 +107,14 @@ textarea{min-height:80px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION="1.9";
+const APP_VERSION="2.0";
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
           set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){toast('Could not save on this device');return false}}};
 const TZ='Asia/Tokyo';
-let trip=LS.get('jt_trip',null), spend=LS.get('jt_spend',[]), rate=LS.get('jt_rate',null);
+let trip=LS.get('jt_trip',null), spend=LS.get('jt_spend',[]), rate=LS.get('jt_rate',null), myBudget=LS.get('jt_budget',null);
 let packChk=LS.get('jt_pack',{}),packAdd=LS.get('jt_pack_add',{});
 let tab=LS.get('jt_tab','today'), selDay=null, map=null, meMarker=null, watchId=null, clockTimer=null;
 const saveTrip=()=>LS.set('jt_trip',trip), saveSpend=()=>LS.set('jt_spend',spend);
@@ -451,21 +451,68 @@ function locate(){if(!navigator.geolocation){toast('Location not available');ret
 
 /* ---------- MONEY ---------- */
 let moneyView='budget';
+const bud=()=>myBudget||trip.budget||{categories:[]};
+const budPrepaid=B=>(B.prepaid||[]).reduce((a,x)=>a+(+x.usd||0),0);
+const budAvail=B=>B.total!=null&&B.total!==''?(+B.total||0)-budPrepaid(B):(+B.remaining||0);
+const catUsed=c=>(+c.committed||0)+spentUSD(x=>x.cat===c.name);
+function daysLeftInTrip(){const D=(trip.days||[]).filter(isJapanDay);if(!D.length)return 0;const t=today(),f=D[0].date,l=D[D.length-1].date;
+  const from=t<f?f:t;if(from>l)return 0;return Math.round((new Date(l)-new Date(from))/864e5)+1}
+function saveBudget(B){myBudget=B;LS.set('jt_budget',B)}
+async function resetBudget(){if(!await ask("Go back to the budget from the trip file? Your purchases stay.",'Reset'))return;myBudget=null;LS.set('jt_budget',null);render();toast('Budget reset')}
+function bRow(kind,x){return kind==='pre'
+  ?`<div class="row brow" data-kind="pre" style="margin-bottom:6px"><input class="bn" value="${esc(x.name||'')}" placeholder="Flights" style="flex:2;margin:0"><input class="bu" inputmode="decimal" value="${esc(x.usd??'')}" placeholder="$" style="flex:1;margin:0"><button class="btn sm ghost" onclick="this.parentNode.remove();budTotals()">✕</button></div>`
+  :`<div class="brow" data-kind="cat" data-old="${esc(x.name||'')}" style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)"><div class="row"><input class="bn" value="${esc(x.name||'')}" placeholder="Category" style="flex:2;margin:0"><button class="btn sm ghost" onclick="this.closest('.brow').remove();budTotals()">✕</button></div>
+    <div class="row" style="margin-top:6px"><div style="flex:1"><label>Limit $</label><input class="ba" inputmode="decimal" value="${esc(x.amount??'')}" oninput="budTotals()" style="margin:0"></div><div style="flex:1"><label>Already booked $</label><input class="bc" inputmode="decimal" value="${esc(x.committed??'')}" style="margin:0"></div></div>
+    <input class="bnote" type="hidden" value="${esc(x.note||'')}"></div>`}
+function editBudget(){const B=JSON.parse(JSON.stringify(bud()));
+  if(B.total==null){B.total=Math.round((+B.remaining||0)+budPrepaid(B))}
+  openSheet(`<h2>✏️ Edit budget</h2><div class="small muted">Raise the total any time. Category limits are what keep you from splurging by accident.</div>
+  <div class="row" style="margin-top:8px"><div style="flex:1"><label>Total trip budget $</label><input id="bT" inputmode="decimal" value="${esc(B.total)}" oninput="budTotals()"></div><div style="flex:1"><label>Daily food target $</label><input id="bF" inputmode="decimal" value="${esc(B.dailyFood??'')}"></div></div>
+  <h3 style="margin:10px 0 6px">Already paid (before the trip)</h3><div id="bPre">${(B.prepaid||[]).map(x=>bRow('pre',x)).join('')}</div>
+  <button class="btn sm" onclick="$('#bPre').insertAdjacentHTML('beforeend',bRow('pre',{}))">＋ Add prepaid item</button>
+  <h3 style="margin:14px 0 6px">Categories (spending limits)</h3><div id="bCats">${B.categories.map(c=>bRow('cat',c)).join('')}</div>
+  <button class="btn sm" onclick="$('#bCats').insertAdjacentHTML('beforeend',bRow('cat',{}))">＋ Add category</button>
+  <div id="bSum" class="card small" style="margin-top:12px"></div>
+  <div class="row"><button class="btn pri" onclick="saveBudgetForm()">Save budget</button><button class="btn ghost" onclick="closeSheet()">Cancel</button></div>`);
+  $('#bPre').addEventListener('input',budTotals);budTotals()}
+function readBudgetForm(){const pre=[...document.querySelectorAll('#bPre .brow')].map(r=>({name:r.querySelector('.bn').value.trim(),usd:parseFloat(r.querySelector('.bu').value)||0})).filter(x=>x.name||x.usd);
+  const cats=[...document.querySelectorAll('#bCats .brow')].map(r=>({old:r.dataset.old,name:r.querySelector('.bn').value.trim(),amount:parseFloat(r.querySelector('.ba').value)||0,committed:parseFloat(r.querySelector('.bc').value)||0,note:r.querySelector('.bnote').value})).filter(c=>c.name);
+  return {total:parseFloat($('#bT').value)||0,dailyFood:parseFloat($('#bF').value)||0,prepaid:pre,categories:cats}}
+function budTotals(){const f=readBudgetForm(),pp=f.prepaid.reduce((a,x)=>a+x.usd,0),av=f.total-pp,as=f.categories.reduce((a,c)=>a+c.amount,0),un=av-as;
+  const el=$('#bSum');if(el)el.innerHTML=`<div class="between"><span>Total</span><b>${usd(f.total)}</b></div><div class="between"><span>− Already paid</span><b>${usd(pp)}</b></div><div class="between"><span>= Money to spend</span><b>${usd(av)}</b></div><div class="between"><span>Assigned to categories</span><b>${usd(as)}</b></div><div class="between"><span>Not assigned (buffer)</span><b class="${un<0?'warnc':'okc'}">${usd(un)}</b></div>${un<0?'<div class="warnc" style="margin-top:4px">Limits add up to more than you have.</div>':''}`}
+function saveBudgetForm(){const f=readBudgetForm();if(!f.categories.length){toast('Keep at least one category');return}
+  const names=new Set();for(const c of f.categories){if(names.has(c.name)){toast('Two categories have the same name');return}names.add(c.name)}
+  f.categories.forEach(c=>{if(c.old&&c.old!==c.name)spend.forEach(x=>{if(x.cat===c.old)x.cat=c.name})});saveSpend();
+  f.categories=f.categories.map(({old,...c})=>{if(!c.committed)delete c.committed;if(!c.note)delete c.note;return c});
+  saveBudget(f);closeSheet();render();toast('Budget saved')}
+function spendHint(){const k=$('#sK'),a=$('#sA'),c=$('#sC'),el=$('#sHint');if(!k||!el)return;const cat=bud().categories.find(x=>x.name===k.value);if(!cat){el.innerHTML='';return}
+  const amt=parseFloat(a.value)||0,add=amt?toUSD(amt,c.value):0,lim=+cat.amount||0,used=catUsed(cat)-(window._editAmt||0),after=lim-used-add;
+  el.innerHTML=`<span class="${after<0?'warnc':after<lim*0.2?'warnc':'muted'}">${esc(cat.name)}: ${usd(lim-used)} left${amt?` → <b>${after>=0?usd(after)+' left after this':usd(-after)+' OVER after this'}</b>`:''}</span>`}
 function spentUSD(f){return spend.filter(f||(()=>1)).reduce((a,x)=>a+toUSD(x.amount,x.cur),0)}
 function rMoney(){const b=trip.budget||{categories:[]},t=today();let h=`<div class="tabs2">${['budget','log','haul'].map(v=>`<button class="chip ${moneyView===v?'on':''}" onclick="moneyView='${v}';render()">${{budget:'Budget',log:'Spending',haul:'Haul & tax-free'}[v]}</button>`).join('')}</div>`;
   h+=`<button class="btn pri" style="width:100%;justify-content:center;margin-bottom:12px" onclick="addSpend()">＋ Log a purchase</button>`;
-  if(moneyView==='budget'){const committed=b.categories.reduce((a,c)=>a+(+c.committed||0),0),sp=spentUSD(),left=(+b.remaining||0)-committed-sp,todaySp=spentUSD(x=>x.date===t),daily=+b.dailyFood||0;
-    h+=`<div class="card"><div class="muted small">Trip money left</div><div class="big ${left<0?'warnc':''}">${usd(left)}</div><div class="muted small">of ${usd(+b.remaining||0)} after prepaid stuff · ${usd(committed)} booked · ${usd(sp)} logged</div></div>`;
+  if(moneyView==='budget'){const B=bud(),av=budAvail(B),t=today();
+    const committed=B.categories.reduce((a,c)=>a+(+c.committed||0),0),sp=spentUSD(),left=av-committed-sp,todaySp=spentUSD(x=>x.date===t),daily=+B.dailyFood||0;
+    const assigned=B.categories.reduce((a,c)=>a+(+c.amount||0),0),unas=av-assigned;
+    h+=`<div class="card"><div class="between"><div class="muted small">Trip money left</div><button class="btn sm" onclick="editBudget()">✏️ Edit budget</button></div><div class="big ${left<0?'warnc':''}">${usd(left)}</div>
+      <div class="muted small">${B.total?`${usd(B.total)} total − ${usd(budPrepaid(B))} prepaid = ${usd(av)} to spend`:`${usd(av)} to spend`} · ${usd(committed)} booked · ${usd(sp)} logged</div></div>`;
+    const food=B.categories.find(c=>/food/i.test(c.name));let pace='';
+    if(food){const fl=(+food.amount||0)-(+food.committed||0)-spentUSD(x=>x.cat===food.name),dl=daysLeftInTrip();if(dl>0)pace=`<div class="small" style="margin-top:6px">🍜 Food money left: <b>${usd(fl)}</b> for ${dl} day${dl>1?'s':''} = <b class="${fl/dl<daily*0.8?'warnc':'okc'}">${usd(fl/dl)}/day</b></div>`}
     h+=`<div class="card"><div class="between"><div><div class="muted small">Spent today</div><div style="font-size:22px;font-weight:700">${usd(todaySp)}</div></div><div style="text-align:right"><div class="muted small">Daily food target</div><div style="font-size:22px;font-weight:700">${usd(daily)}</div></div></div>
-    <div class="bar ${todaySp>daily?'over':''}"><i style="width:${Math.min(100,daily?todaySp/daily*100:0)}%"></i></div></div>`;
-    h+=`<div class="card"><h2>By category</h2>${b.categories.map(c=>{const used=(+c.committed||0)+spentUSD(x=>x.cat===c.name),pct=c.amount?used/c.amount*100:0;
-      return `<div style="margin-bottom:10px"><div class="between small"><b>${esc(c.name)}</b><span>${usd(used)} / ${usd(c.amount)}</span></div><div class="bar ${pct>100?'over':''}"><i style="width:${Math.min(100,pct)}%"></i></div>${c.note?`<div class="small muted">${esc(c.note)}</div>`:''}</div>`}).join('')}</div>`;
+    <div class="bar ${todaySp>daily?'over':''}"><i style="width:${Math.min(100,daily?todaySp/daily*100:0)}%"></i></div>${pace}</div>`;
+    h+=`<div class="card"><h2>By category</h2><div class="small muted" style="margin-bottom:8px">Each category is a limit. Log purchases to the right one and you'll see when one gets close.</div>${B.categories.map(c=>{const used=catUsed(c),lim=+c.amount||0,pct=lim?used/lim*100:0,rem=lim-used;
+      const st=pct>100?'over':pct>=80?'warn':'';
+      return `<div style="margin-bottom:12px"><div class="between small"><b>${esc(c.name)}</b><span>${usd(used)} / ${usd(lim)}</span></div><div class="bar ${st==='over'?'over':''}"><i style="width:${Math.min(100,pct)}%;${st==='warn'?'background:var(--warn)':''}"></i></div>
+        <div class="between small"><span class="muted">${esc(c.note||'')}${c.committed?`${c.note?' · ':''}${usd(+c.committed)} already booked`:''}</span><span class="${st==='over'?'warnc':st==='warn'?'warnc':'okc'}" style="flex:none">${rem>=0?usd(rem)+' left':usd(-rem)+' over'}</span></div></div>`}).join('')}
+      <div class="between small" style="border-top:1px solid var(--line);padding-top:8px"><b>Not assigned (buffer)</b><span class="${unas<0?'warnc':''}">${usd(unas)}</span></div>${unas<0?'<div class="small warnc">Your category limits add up to more than you have. Lower one or raise the total.</div>':''}</div>`;
+    if((B.prepaid||[]).length)h+=`<div class="card"><h2>✅ Already paid</h2><div class="list small">${B.prepaid.map(x=>`<div class="between"><span>${esc(x.name)}${x.note?` <span class="muted">· ${esc(x.note)}</span>`:''}</span><b>${usd(+x.usd||0)}</b></div>`).join('')}</div><div class="between small" style="margin-top:6px"><span class="muted">Total prepaid</span><b>${usd(budPrepaid(B))}</b></div></div>`;
+    if(myBudget)h+=`<div class="small muted" style="margin:-4px 2px 12px">Using your edited budget (saved on this phone). <a href="#" onclick="resetBudget();return false" style="color:var(--accent)">Reset to the trip file's budget</a></div>`;
     h+=convCard();}
   if(moneyView==='log'){const byDay={};spend.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.ts-a.ts).forEach(x=>(byDay[x.date]=byDay[x.date]||[]).push(x));
     h+=Object.keys(byDay).length?Object.entries(byDay).map(([d,xs])=>`<div class="card"><div class="between"><h2>${dLabel(d)}</h2><b>${usd(xs.reduce((a,x)=>a+toUSD(x.amount,x.cur),0))}</b></div><div class="list">${xs.map(x=>`<div class="between" onclick="editSpend('${x.id}')"><div><b>${esc(x.item||x.cat)}</b><div class="small muted">${esc(x.cat)}${x.store?' · '+esc(x.store):''}${x.taxFree?' · 🧾 tax-free':''}</div></div><div style="text-align:right">${x.cur==='USD'?usd(x.amount):yen(x.amount)}<div class="small muted">${x.cur==='USD'?'':usd(toUSD(x.amount,'JPY'))}</div></div></div>`).join('')}</div></div>`).join(''):'<div class="card muted">Nothing logged yet. Tap “Log a purchase” after you buy something.</div>';}
   if(moneyView==='haul'){const haul=spend.filter(x=>x.cat==='Shopping & gifts');
     const stores={};haul.forEach(x=>{if(x.cur!=='JPY')return;const k=x.date+'|'+(x.store||'?');stores[k]=(stores[k]||0)+ +x.amount});
-    h+=`<div class="card"><h2>🧾 Tax-free tracker</h2><div class="small muted">¥5,000+ at one store in one day qualifies. Show your passport at checkout, keep items sealed, and claim the refund at the Narita kiosk before check-in.</div><div class="list" style="margin-top:6px">${Object.entries(stores).map(([k,v])=>{const[d,s]=k.split('|');return `<div class="between"><div><b>${esc(s)}</b><div class="small muted">${dLabel(d)}</div></div><div>${yen(v)} ${v>=5000?'<span class="badge ok">✓ eligible</span>':`<span class="badge">${yen(5000-v)} to go</span>`}</div></div>`}).join('')||'<div class="muted small">Log purchases with a store name to track this.</div>'}</div></div>`;
+    h+=`<div class="card"><h2>🧾 Tax-free tracker</h2><div class="small muted">¥5,000+ at one store in one day qualifies. Show your passport at checkout (you pay full price), keep items unused + receipts, then claim the 10% back at the Narita customs kiosk before bag drop.</div><div class="list" style="margin-top:6px">${Object.entries(stores).map(([k,v])=>{const[d,s]=k.split('|');return `<div class="between"><div><b>${esc(s)}</b><div class="small muted">${dLabel(d)}</div></div><div>${yen(v)} ${v>=5000?'<span class="badge ok">✓ eligible</span>':`<span class="badge">${yen(5000-v)} to go</span>`}</div></div>`}).join('')||'<div class="muted small">Log purchases with a store name to track this.</div>'}</div></div>`;
     h+=`<div class="card"><h2>🛍️ My haul (${haul.length})</h2><div class="list">${haul.map(x=>`<div class="between" onclick="editSpend('${x.id}')"><div><b>${esc(x.item||'Item')}</b><div class="small muted">${esc(x.store||'')} · ${dLabel(x.date)}${x.forWho?' · for '+esc(x.forWho):''}</div></div><div>${x.cur==='USD'?usd(x.amount):yen(x.amount)}</div></div>`).join('')||'<div class="muted small">Nothing yet. Go shopping! 🛒</div>'}</div></div>`;
     if(trip.shoppingList&&trip.shoppingList.length)h+=`<div class="card"><h2>📝 Shopping list</h2>${trip.shoppingList.map((x,i)=>`<div class="check"><input type="checkbox" id="sl${i}" ${x.got?'checked':''} onchange="trip.shoppingList[${i}].got=this.checked;saveTrip()"><label for="sl${i}" style="margin:0;color:var(--text)">${esc(x.item)}${x.forWho?` <span class="muted small">for ${esc(x.forWho)}</span>`:''}</label></div>`).join('')}</div>`;}
   $('#main').innerHTML=h;refreshRate();}
@@ -473,20 +520,22 @@ function convCard(){return `<div class="card"><h2>💱 Converter</h2><div class=
   <div class="small muted" id="rateTxt">¥1,000 ≈ $${(1000*usdPerJpy()).toFixed(2)}${rate?` · rate from ${new Date(rate.t).toLocaleDateString()}`:' · saved estimate'}</div></div>`}
 async function refreshRate(){if(rate&&Date.now()-rate.t<6*3600e3)return;try{const r=await fetch('https://open.er-api.com/v6/latest/USD');const j=await r.json();if(j&&j.rates&&j.rates.JPY){rate={v:1/j.rates.JPY,t:Date.now()};LS.set('jt_rate',rate);const el=$('#rateTxt');if(el)el.textContent=`¥1,000 ≈ $${(1000*rate.v).toFixed(2)} · live rate`}}catch(e){}}
 function addSpend(){editSpend(null)}
-function editSpend(id){const x=id?spend.find(s=>s.id===id):{date:today(),cur:'JPY',cat:'Food & local trains'};const cats=(trip.budget&&trip.budget.categories||[]).map(c=>c.name);
+function editSpend(id){const x=id?spend.find(s=>s.id===id):{date:today(),cur:'JPY',cat:'Food & local trains'};const cats=bud().categories.map(c=>c.name);window._editAmt=id?toUSD(x.amount,x.cur):0;
   openSheet(`<h2>${id?'Edit purchase':'Log a purchase'}</h2>
-  <div class="row"><div style="flex:2"><label>Amount</label><input id="sA" inputmode="decimal" value="${esc(x.amount??'')}" placeholder="1200"></div><div style="flex:1"><label>Currency</label><select id="sC"><option ${x.cur==='JPY'?'selected':''}>JPY</option><option ${x.cur==='USD'?'selected':''}>USD</option></select></div></div>
-  <label>Category</label><select id="sK">${cats.map(c=>`<option ${c===x.cat?'selected':''}>${esc(c)}</option>`).join('')}</select>
+  <div class="row"><div style="flex:2"><label>Amount</label><input id="sA" inputmode="decimal" value="${esc(x.amount??'')}" placeholder="1200" oninput="spendHint()"></div><div style="flex:1"><label>Currency</label><select id="sC" onchange="spendHint()"><option ${x.cur==='JPY'?'selected':''}>JPY</option><option ${x.cur==='USD'?'selected':''}>USD</option></select></div></div>
+  <label>Category</label><select id="sK" onchange="spendHint()">${cats.map(c=>`<option ${c===x.cat?'selected':''}>${esc(c)}</option>`).join('')}</select><div id="sHint" class="small" style="margin:-4px 0 8px"></div>
   <label>What was it?</label><input id="sI" value="${esc(x.item||'')}" placeholder="Ramen, Miku figure, train ticket…">
   <label>Store (needed for tax-free tracking)</label><input id="sS" value="${esc(x.store||'')}" placeholder="Pokémon Center Shibuya">
   <label>For who? (gifts)</label><input id="sW" value="${esc(x.forWho||'')}" placeholder="Me, Mom, sister…">
   <label>Date</label><input id="sD" type="date" value="${esc(x.date)}">
-  <div class="check"><input type="checkbox" id="sT" ${x.taxFree?'checked':''}><label for="sT" style="margin:0">🧾 Bought tax-free (keep sealed, refund at airport)</label></div>
+  <div class="check"><input type="checkbox" id="sT" ${x.taxFree?'checked':''}><label for="sT" style="margin:0">🧾 Bought tax-free (keep unused + receipt, refund at Narita)</label></div>
   <div class="row"><button class="btn pri" onclick="saveSpendEntry('${id||''}')">Save</button>${id?`<button class="btn" style="color:var(--accent)" onclick="delSpend('${id}')">Delete</button>`:''}<button class="btn ghost" onclick="closeSheet()">Cancel</button></div>`);
-  setTimeout(()=>{const a=$('#sA');if(a&&!id)a.focus()},50)}
+  setTimeout(()=>{spendHint();const a=$('#sA');if(a&&!id)a.focus()},50)}
 function saveSpendEntry(id){const a=parseFloat($('#sA').value);if(!(a>0)){toast('Enter an amount');return}
   const e={id:id||uid(),ts:Date.now(),amount:a,cur:$('#sC').value,cat:$('#sK').value,item:$('#sI').value.trim(),store:$('#sS').value.trim(),forWho:$('#sW').value.trim(),date:$('#sD').value||today(),taxFree:$('#sT').checked};
-  const i=spend.findIndex(s=>s.id===id);if(i>=0)spend[i]=e;else spend.push(e);saveSpend();closeSheet();render();toast('Logged')}
+  const i=spend.findIndex(s=>s.id===id);if(i>=0)spend[i]=e;else spend.push(e);saveSpend();closeSheet();render();
+  const c=bud().categories.find(x=>x.name===e.cat),lim=c?+c.amount||0:0,u=c?catUsed(c):0;
+  toast(c&&lim&&u>lim?`Logged · ${c.name} is ${usd(u-lim)} over`:c&&lim&&u>=lim*0.8?`Logged · ${c.name}: ${usd(lim-u)} left`:'Logged')}
 async function delSpend(id){if(!await ask('Delete this entry?','Delete'))return;spend=spend.filter(s=>s.id!==id);saveSpend();closeSheet();render()}
 
 /* ---------- INFO ---------- */
@@ -524,7 +573,7 @@ function rInfo(){const views={spots:'📍 Saved spots',pack:'🧳 Packing',tips:
     h+=`<div class="card"><h2>🚨 Emergency</h2><div class="list">${(e.numbers||[]).map(n=>`<div class="between"><div><b>${esc(n.name)}</b>${n.note?`<div class="small muted">${esc(n.note)}</div>`:''}</div><a class="btn sm" href="tel:${esc(n.tel)}">📞 ${esc(n.tel)}</a></div>`).join('')}</div>${e.insurance?`<div class="small" style="margin-top:8px">Travel insurance: ${esc(e.insurance)}</div>`:''}</div>`;
     h+=`<div class="card"><h2>🗣️ Phrases</h2><div class="small muted">Tap 🔊 to have your phone say it.</div><div class="list">${(trip.phrases||[]).map((p,i)=>`<div class="between"><div><b>${esc(p.en)}</b><div>${esc(p.ja)}</div><div class="small muted">${esc(p.romaji||'')}</div></div><button class="btn sm" onclick="say(${i})">🔊</button></div>`).join('')}</div></div>`;
     h+=clockCard();}
-  if(infoView==='data'){h+=`<div class="card"><h2>📂 Your trip file</h2><p class="small muted">Everything lives only on this phone. Export to back it up or to send me a copy to update. Import a new file to replace the trip (your spending log stays).</p>
+  if(infoView==='data'){h+=`<div class="card"><h2>📂 Your trip file</h2><p class="small muted">Everything lives only on this phone. Export to back it up or to send me a copy to update. Import a new file to replace the trip (your spending log and edited budget stay).</p>
     <div class="row"><button class="btn pri" onclick="pickFile()">Import trip file</button><button class="btn" onclick="exportTrip()">Export / back up</button></div>
     <div class="small muted" style="margin-top:8px">Trip file version: ${esc(trip.version||'?')} · App v${APP_VERSION} · ${spend.length} purchases logged</div><button class="btn sm ghost" style="margin-top:6px" onclick="checkUpdate().then(()=>{if(!$('#upd'))toast('App is up to date')})">Check for app update</button></div>
     <div class="card"><h2>Reset</h2><p class="small muted">Clears the trip and spending log from this phone.</p><button class="btn" style="color:var(--accent)" onclick="resetAll()">Erase everything</button></div>`;}
@@ -555,12 +604,13 @@ $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeSheet()})
 function pickFile(){$('#fileIn').value='';$('#fileIn').click()}
 $('#fileIn').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;
   try{const j=JSON.parse(await f.text());if(!Array.isArray(j.days)||!j.days.length)throw new Error('This file has no days in it.');
-    const sp=j._spending;delete j._spending;
+    const sp=j._spending;delete j._spending;const jb=j._budget;delete j._budget;
     if(trip&&!await ask(`Replace your current trip with “${j.name||'this file'}”${j.version?' (v'+j.version+')':''}? Your spending log stays.`,'Replace'))return;
     trip=j;saveTrip();
     if(Array.isArray(sp)&&sp.length&&(!spend.length||await ask(`This file also has ${sp.length} logged purchases. Restore them (replaces this phone's log)?`,'Restore'))){spend=sp;saveSpend()}
+    if(jb&&jb.categories&&(!myBudget||await ask('This file also has an edited budget. Use it (replaces the budget on this phone)?','Use it')))saveBudget(jb);
     selDay=null;render();toast('Trip loaded ✓')}catch(err){ask('Could not read that file: '+err.message,'OK',true)}});
-async function exportTrip(){const data=JSON.stringify(Object.assign({},trip,{_spending:spend,exported:new Date().toISOString()}),null,2);
+async function exportTrip(){const data=JSON.stringify(Object.assign({},trip,{_spending:spend,_budget:myBudget||undefined,exported:new Date().toISOString()}),null,2);
   const name=`japan-trip-${today()}.json`,file=new File([data],name,{type:'application/json'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
   const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
