@@ -64,7 +64,9 @@ table{width:100%;border-collapse:collapse;font-size:14px}td{padding:7px 0;border
 .me{background:#3b82f6;border:3px solid #fff;border-radius:50%;width:18px!important;height:18px!important;box-shadow:0 0 0 6px rgba(59,130,246,.25)}
 .modal{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
 .hidden{display:none!important}
-.sheet{background:var(--card);width:100%;max-width:720px;max-height:90vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom))}
+.sheet{background:var(--card);width:100%;max-width:720px;max-height:85vh;max-height:85dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;border-radius:20px 20px 0 0;padding:0 16px calc(18px + env(safe-area-inset-bottom))}
+.sheetbar{position:sticky;top:0;z-index:5;display:flex;justify-content:center;align-items:flex-start;background:var(--card);height:48px;padding-top:10px;box-sizing:border-box;margin:0 -16px 4px}.sheetbar i{width:40px;height:5px;border-radius:3px;background:var(--line)}.sheetbar button{position:absolute;right:10px;top:6px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--card2);color:var(--text);font:600 16px/1 inherit;cursor:pointer}
+body.locked{overflow:hidden}
 label{display:block;font-size:13px;color:var(--muted);margin-top:4px}
 input,select,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:16px inherit;margin:4px 0 8px}
 textarea{min-height:80px}
@@ -107,7 +109,7 @@ textarea{min-height:80px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION="2.0";
+const APP_VERSION="2.1";
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -370,12 +372,12 @@ function spotLocate(cb){if(!navigator.geolocation){toast('Location not available
     ()=>toast('Allow location access to see distances'),{enableHighAccuracy:true,maximumAge:60000,timeout:15000})}
 function spotDirURL(x){const dest=x.lat!=null?`${x.lat},${x.lon}`:encodeURIComponent([x.name,x.address].filter(Boolean).join(', '));
   return `https://www.google.com/maps/dir/?api=1${spotLoc?`&origin=${spotLoc.lat},${spotLoc.lon}`:''}&destination=${dest}&travelmode=transit`}
-function closeSpot(){if(spotMap){spotMap.remove();spotMap=null}const m=document.getElementById('spotModal');if(m)m.remove()}
+function closeSpot(){if(spotMap){spotMap.remove();spotMap=null}const m=document.getElementById('spotModal');if(m)m.remove();document.body.classList.remove('locked')}
 function spotDistText(x){if(!spotLoc)return 'Finding you…';const km=dist(spotLoc,x);if(km==null)return '';
   return `📍 ${fmtKm(km)} from you`+(km<=3?` · ~${walkMin(spotLoc,x)} min walk`:km>100?' · that\'s in another city':km>40?' · a day trip from here':' · take the train')}
 function openSpot(i){const x=(trip.spots||[])[i];if(!x)return;closeSpot();
   const m=document.createElement('div');m.className='modal';m.id='spotModal';m.onclick=e=>{if(e.target===m)closeSpot()};
-  m.innerHTML=`<div class="sheet"><div class="between"><h2 style="margin:0">${esc(x.icon||'📍')} ${esc(x.name)}</h2><button class="btn sm ghost" onclick="closeSpot()">✕</button></div>
+  m.innerHTML=`<div class="sheet" style="padding-top:14px"><div class="between"><h2 style="margin:0">${esc(x.icon||'📍')} ${esc(x.name)}</h2><button class="btn sm ghost" onclick="closeSpot()">✕</button></div>
     <div class="small muted" style="margin:4px 0 8px">${esc([x.when,x.hours].filter(Boolean).join(' · '))}</div>
     <div id="spotmap" style="height:260px;border-radius:12px;overflow:hidden;background:var(--card2)"></div>
     <div id="spotDist" class="small" style="margin:8px 0">${esc(spotDistText(x))}</div>
@@ -383,7 +385,7 @@ function openSpot(i){const x=(trip.spots||[])[i];if(!x)return;closeSpot();
     ${x.address?`<div class="small muted" style="margin-bottom:10px">${esc(x.address)}</div>`:''}
     <div class="row"><a class="btn pri" id="spotDir" href="${spotDirURL(x)}" target="_blank" rel="noopener" style="flex:1;justify-content:center">🧭 Directions</a>
     <a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([x.name,x.address].filter(Boolean).join(', '))}" target="_blank" rel="noopener">Google Maps</a></div></div>`;
-  document.body.appendChild(m);
+  document.body.appendChild(m);document.body.classList.add('locked');
   const draw=()=>{if(!window.L||x.lat==null){const el=$('#spotmap');if(el)el.innerHTML='<div class="muted small" style="padding:12px">Map needs a connection. Directions still work.</div>';return}
     if(!spotMap){spotMap=L.map('spotmap',{zoomControl:false,attributionControl:false}).setView([x.lat,x.lon],15);
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(spotMap);
@@ -598,8 +600,8 @@ function ask(msg,yes,only){return new Promise(res=>{const d=document.createEleme
   d.innerHTML=`<div class="sheet" style="max-width:420px;border-radius:20px;margin:0 16px calc(24px + env(safe-area-inset-bottom))"><p style="margin:4px 0 14px;white-space:pre-line">${esc(msg)}</p><div class="row" style="justify-content:flex-end">${only?'':'<button class="btn ghost" data-v="0">Cancel</button>'}<button class="btn pri" data-v="1">${esc(yes||'OK')}</button></div></div>`;
   d.onclick=e=>{const b=e.target.closest('button');if(!b&&e.target!==d)return;d.remove();res(!!(b&&b.dataset.v==='1'))};document.body.appendChild(d)})}
 /* ---------- sheet / import / export ---------- */
-function openSheet(h){$('#sheet').innerHTML=h;$('#modal').classList.remove('hidden')}
-function closeSheet(){$('#modal').classList.add('hidden')}
+function openSheet(h){const s=$('#sheet');s.innerHTML=`<div class="sheetbar"><i></i><button onclick="closeSheet()" aria-label="Close">✕</button></div>`+h;s.scrollTop=0;$('#modal').classList.remove('hidden');document.body.classList.add('locked')}
+function closeSheet(){$('#modal').classList.add('hidden');document.body.classList.remove('locked')}
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeSheet()});
 function pickFile(){$('#fileIn').value='';$('#fileIn').click()}
 $('#fileIn').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;
